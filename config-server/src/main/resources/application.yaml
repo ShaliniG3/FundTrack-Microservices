@@ -1,0 +1,14 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native # This tells Spring NOT to look for a .git folder
+  cloud:
+    config:
+      server:
+        native:
+          # Point directly to the folder containing your .yml files
+          search-locations: file:///C:/Users/2479399/Downloads/config-server/config-repo
