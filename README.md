@@ -39,7 +39,7 @@ The FundTrack backend is organized into modular microservices, each responsible 
 
 ### 1. Identity Service
 - Handles authentication and role-based access control (RBAC).
-- Maintains audit logs for all user actions.
+- Uses JSON Web Tokens (JWT) to securely manage stateless user sessions and identity.
 
 ### 2. Program Service
 - Manages grant program definitions, budgets, and timelines.
@@ -75,6 +75,10 @@ The FundTrack backend is organized into modular microservices, each responsible 
 ### 10. Analytics Service
 - Generates analytics dashboards and regulatory reports.
 - Enables administrators and stakeholders to make data-driven decisions through real-time insights.
+
+### 11. AuditLog Service
+- Records a permanent, immutable trail of actions, resources, and timestamps.
+- Provides the data source for investigating system changes and user activity..
 
 ---
 
@@ -140,13 +144,14 @@ graph TD
     AGW --> Review[Review & Scoring: 9093]
     AGW --> Decision[Decision Engine: 9094]
     AGW --> Finance[Finance/Payments: 9095]
-    AGW --> Comp[Compliance/Reporting: 9096]
-    AGW --> Report[Compliance/Reporting: 9097]
+    AGW --> Comp[Compliance: 9096]
+    AGW --> Report[Reporting: 9097]
     AGW --> Notify[Notifications: 9098]
     AGW --> Analytics[Analytics: 9099]
+    AGW --> Audit[Auditing: 9100]
     end
 
     subgraph "Data Layer"
     DB[(Relational DB)]
-    Auth & Prog & App & Review & Decision & Finance & Comp & Report & Notify & Analytics --- DB
+    Auth & Prog & App & Review & Decision & Finance & Comp & Report & Notify & Analytics & Audit --- DB
     end
