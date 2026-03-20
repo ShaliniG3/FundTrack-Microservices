@@ -131,7 +131,7 @@ Each service is modular, independently deployable, and connected through an API 
 
 ```mermaid
 graph TD
-    User((Users)) -->|HTTPS| AGW[API Gateway: 8080]
+    User((Users)) -->|HTTPS| AGW[API Gateway: 8081]
     
     subgraph "Core Microservices"
     AGW --> Auth[Identity & Access: 9090]
