@@ -25,4 +25,10 @@ management:
   endpoint:
     health:
       show-details: always
+# Swagger Documentation 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
 
