@@ -46,3 +46,10 @@ jwt:
 
 app:
   password_reset_url: "http://localhost:9090/reset-password?token={token}"
+
+# Swagger Documentation 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
