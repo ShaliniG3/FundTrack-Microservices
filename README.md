@@ -45,38 +45,21 @@ The FundTrack backend is organized into modular microservices, each responsible 
 - Manages grant program definitions, budgets, and timelines.
 - Configures eligibility rules and required documents.
 
-### 3. Application Service
-- Supports application submission and validation.
-- Handles document uploads and eligibility checks.
+### 3. Grant Lifecycle Management Service
+- Application & Intake: Managing applicant submissions, including multipart document uploads and automated eligibility validation.
+- Evaluation & Peer Review: Orchestrating the assignment of applications to reviewers and capturing qualitative feedback, scoring, and internal recommendations.
+- Processing final approval or rejection statuses based on review outcomes to finalize the decision-making phase.
+- Aggregating data across the entire lifecycle to generate real-time analytics, compliance dashboards, and regulatory reports for stakeholders.
 
-### 4. Review Service
-- Assigns reviewers to applications.
-- Captures scores, comments, and recommendations.
+### 4. Grant Disbursement & Compliance Service
+- Financial Operations: Managing complex disbursement schedules, tracking fund allocations, and performing automated payment reconciliations.
+- Regulatory Oversight: Executing both financial and operational compliance checks to mitigate risk and ensure adherence to grant agreements.
+- Providing a dedicated portal for grantees to submit structured periodic reports, financial statements, and operational evidence.
 
-### 5. Decision Service
-- Processes reviewer recommendations.
-- Records final approval or rejection decisions.
-
-### 6. Finance Service
-- Manages disbursement schedules and fund allocations.
-- Tracks payments and reconciliations.
-
-### 7. Compliance Service
-- Performs compliance checks (financial/operational).
-- Collects post-grant reports and monitors adherence.
-
-### 8. Reporting Service
-- Enables applicants, grantees, and project teams to submit periodic and final reports.  
-- Supports uploading structured documents, financial statements, and operational updates.
-
-### 9. Notification Service
+### 5. Notification Service
 - Sends in-app and email alerts for application status, disbursements, and compliance reminders.
 
-### 10. Analytics Service
-- Generates analytics dashboards and regulatory reports.
-- Enables administrators and stakeholders to make data-driven decisions through real-time insights.
-
-### 11. AuditLog Service
+### 6. AuditLog Service
 - Records a permanent, immutable trail of actions, resources, and timestamps.
 - Provides the data source for investigating system changes and user activity..
 
@@ -132,23 +115,28 @@ git clone https://github.com/your-org/fundtrack.git
 
 The system utilizes a **stateless microservices architecture** to handle high concurrency (up to 20,000 users) and ensure modular maintainability.  
 Each service is modular, independently deployable, and connected through an API Gateway for secure communication.
-
 ```mermaid
 graph TD
-    User((Users)) -->|HTTPS| AGW[API Gateway: 8081]
+    User((Users)) -->|HTTPS/REST| AGW[API Gateway: 8081]
     
     subgraph "Core Microservices"
-    AGW --> Auth[Identity & Access: 9090]
-    AGW --> Prog[Grant Programs: 9091]
-    AGW --> App[Application Mgmt: 9092]
-    AGW --> Review[Review & Scoring: 9093]
-    AGW --> Decision[Decision Engine: 9094]
-    AGW --> Finance[Finance/Payments: 9095]
-    AGW --> Comp[Compliance: 9096]
-    AGW --> Report[Reporting: 9097]
-    AGW --> Notify[Notifications: 9098]
-    AGW --> Analytics[Analytics: 9099]
-    AGW --> Audit[Auditing: 9100]
+    AGW --> Auth[1. Identity Service: 9090]
+    AGW --> Prog[2. Program Service: 9091]
+    AGW --> GLMS[3. GLMS: 9092]
+    AGW --> GDCS[4. GDCS: 9093]
+    AGW --> Notify[5. Notification Service: 9094]
+    AGW --> Audit[6. AuditLog Service: 9095]
+    end
+
+    subgraph "Data & Storage Layer"
+    GLMS & GDCS --- S3[(Object Storage: PDFs/Proofs)]
+    Auth & Prog & GLMS & GDCS & Notify & Audit --- DB[(PostgreSQL Cluster)]
+    end
+
+    subgraph "Messaging Layer"
+    GLMS -.->|Events| Notify
+    GDCS -.->|Events| Notify
+    GLMS & GDCS -.->|Audit Trail| Audit
     end
 
     subgraph "Data Layer"
