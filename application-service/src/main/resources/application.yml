@@ -1,0 +1,36 @@
+server:
+  port: 9092
+
+spring:
+  application:
+    name: application_service
+
+  # Keep Config Client disabled
+  cloud:
+    config:
+      enabled: false
+    # FIX: This is the correct property path for modern Spring Cloud!
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/application_db
+    username: root
+    password: Sonu@4002
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# FIX: Disable Eureka completely so it stops crashing your app while it's down
+eureka:
+  client:
+    enabled: false 
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
