@@ -1,0 +1,53 @@
+server:
+  port: 9093
+
+spring:
+  application:
+    name: fundtrack-compliance-service
+
+  # Disables the search for a central Config Server for local testing
+  cloud:
+    config:
+      enabled: false
+
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/fundtrack_compliance_db?createDatabaseIfNotExist=true
+    username: root
+    password: Password@123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# Combined Eureka Discovery Client Configuration
+eureka:
+  client:
+    enabled: false               # This turns it off for now
+    register-with-eureka: false  # This prevents registration attempts
+    fetch-registry: false        # This stops it from looking for other services
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.cts.fundtrack: DEBUG
+    org.hibernate.SQL: DEBUG
