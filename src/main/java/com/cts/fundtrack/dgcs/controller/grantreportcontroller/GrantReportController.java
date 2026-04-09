@@ -2,32 +2,39 @@ package com.cts.fundtrack.dgcs.controller.grantreportcontroller;
 
 import com.cts.fundtrack.dgcs.dto.grantreportdto.GrantReportRequestDTO;
 import com.cts.fundtrack.dgcs.dto.grantreportdto.GrantReportResponseDTO;
+
 import com.cts.fundtrack.dgcs.service.grantreportservice.GrantReportService;
+
 import com.cts.fundtrack.dgcs.exception.InvalidInputException;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 //import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
 
 /**
- * REST controller providing endpoints for submitting and retrieving grant progress reports.
+ * REST controller for managing grant progress report submissions and history.
  * <p>
- * Supports multipart uploads where JSON metadata and a PDF proof document are submitted together.
- * Applicants use these endpoints to submit progress updates, while audit personnel may retrieve
- * previously submitted reports.
+ * Handles multipart requests containing JSON metadata and PDF evidence.
+ * This controller facilitates the reporting lifecycle for applicants and
+ * provides historical data access for audit personnel.
  * </p>
  */
+
 @RestController
 @RequestMapping("/api/v1/reports")
 @Slf4j
@@ -53,13 +60,14 @@ public class GrantReportController {
                     + "The PDF serves as supporting evidence for the grant's progress.",
             responses = {
                     @ApiResponse(responseCode = "201", description = "Report successfully submitted"),
-                    @ApiResponse(responseCode = "400", description = "Invalid request or non-PDF uploaded"),
-                    @ApiResponse(responseCode = "500", description = "Error while processing the request")
+                    @ApiResponse(responseCode = "400", description = "Validation failed: Check file type or mandatory fields"),
+                    @ApiResponse(responseCode = "404", description = "Reference Error: The associated Application ID was not found"),
+                    @ApiResponse(responseCode = "500", description = "Server Error: Disk storage or Database synchronization failure")
             }
     )
 
-   // @PreAuthorize("hasRole('APPLICANT') and @securityService.isApplicationOwner(#dto.applicationId)")
-    @PostMapping(value = "/submit", consumes = {"multipart/form-data"})
+    // @PreAuthorize("hasRole('APPLICANT') and @securityService.isApplicationOwner(#dto.applicationId)")
+    @PostMapping(value = "/grant_report", consumes = {"multipart/form-data"})
     public ResponseEntity<GrantReportResponseDTO> submitGrantReport(
             @RequestPart("data") @Valid GrantReportRequestDTO dto,
             @RequestPart("proof") MultipartFile proof) {
@@ -88,20 +96,29 @@ public class GrantReportController {
     @Operation(
             summary = "Retrieve report history",
             description = "Returns all progress reports that have been previously submitted "
-                    + "for the specified grant application."
+                    + "for the specified grant application.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "History successfully resolved"),
+                    @ApiResponse(responseCode = "404", description = "Application context not found")
+            }
     )
 
-   // @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN') or " +
-     //       "(hasRole('APPLICANT') and @securityService.isApplicationOwner(#applicationId))")
-    @GetMapping("/my-report")
+    // @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN') or " +
+    //       "(hasRole('APPLICANT') and @securityService.isApplicationOwner(#applicationId))")
+    @GetMapping("/grant_reports/{applicationId}")
     public ResponseEntity<List<GrantReportResponseDTO>> getMyGrantReports(
-            @RequestParam UUID applicationId) {
+            @PathVariable UUID applicationId) {
 
-        log.info("Ingress Request | GET /api/v1/reports/my-report | ApplicationID: {}", applicationId);
+        log.info("Ingress Request | GET /api/v1/reports/{} | ApplicationID: {}", applicationId, applicationId);
 
+        // Fetch history from service
         List<GrantReportResponseDTO> history = grantReportService.getMyGrantReports(applicationId);
 
-        log.info("Records Retrieved: {}", history.size());
-        return ResponseEntity.ok(history);
+        // If history is null, provide an empty list to satisfy the Non-null type argument
+        List<GrantReportResponseDTO> safeHistory = (history != null) ? history : List.of();
+
+        log.info("Records Retrieved: {}", safeHistory.size());
+
+        return ResponseEntity.ok(safeHistory);
     }
 }

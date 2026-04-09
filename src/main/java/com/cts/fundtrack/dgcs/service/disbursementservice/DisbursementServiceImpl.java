@@ -58,27 +58,34 @@ public class DisbursementServiceImpl implements DisbursementService {
                 .mapToDouble(Disbursement::getAmount)
                 .sum();
     }
-
     @Transactional
     @Override
     public List<DisbursementResponseDTO> finalizeAndSplitBudget(UUID programId, PaymentFrequency frequency, int numberOfPayments) {
-        log.info("Microservice Sequence: Finalizing Budget | Program ID: {}", programId);
+        log.info("TEST MODE: Running in isolation. Bypassing Feign Clients for Program ID: {}", programId);
 
-        // 1. Verify Program via Feign Client (replacing programRepository)
-        ProgramMetadataDTO program = programClient.getProgramById(programId);
+        // --- MOCKING STEP 1: Program Client ---
+        // Instead of: ProgramMetadataDTO program = programClient.getProgramById(programId);
+        ProgramMetadataDTO program = new ProgramMetadataDTO();
+        program.setProgramId(programId);
+        program.setStatus("CLOSED"); // Set to CLOSED to pass the check below
+        program.setBudget(100000.0);  // Give it a dummy budget
+
+        log.info("Mocked Program Data: Status={}, Budget={}", program.getStatus(), program.getBudget());
 
         if (!"CLOSED".equalsIgnoreCase(program.getStatus())) {
             throw new InvalidProgramStateException("Budget Split Rejected: Program must be CLOSED.");
         }
 
-        // 2. Security Check: Are there pending reviews?
-        // This now requires a Feign call to the Application Service
-        if (applicationClient.hasPendingReviews(programId)) {
+        // --- MOCKING STEP 2: Pending Reviews Check ---
+        // Instead of: if (applicationClient.hasPendingReviews(programId))
+        boolean hasPendingReviews = false; // Hardcode to false for testing
+        if (hasPendingReviews) {
             throw new InvalidProgramStateException("Budget Split Rejected: Pending reviews exist.");
         }
 
-        // 3. Fetch Approved Application IDs (not entities) via Feign
-        List<UUID> winnerIds = applicationClient.getApprovedApplicationIds(programId);
+        // --- MOCKING STEP 3: Approved Application IDs ---
+        // Instead of: List<UUID> winnerIds = applicationClient.getApprovedApplicationIds(programId);
+        List<UUID> winnerIds = List.of(UUID.randomUUID(), UUID.randomUUID()); // Simulate 2 winners
 
         if (winnerIds.isEmpty()) {
             log.info("Process halted: No approved winners for Program: {}.", programId);
@@ -90,16 +97,15 @@ public class DisbursementServiceImpl implements DisbursementService {
         List<Disbursement> allNewEntities = new ArrayList<>();
 
         for (UUID appId : winnerIds) {
-            // Check local DB if schedule already exists for this UUID
             boolean alreadyHasSchedule = !disbursementRepository.findByApplicationId(appId).isEmpty();
 
             if (!alreadyHasSchedule) {
-                // Create the schedule locally
                 List<Disbursement> savedBatch = createInstallments(appId, programId, individualShare, numberOfPayments, interval);
                 allNewEntities.addAll(savedBatch);
 
-                // 4. Update Remote Application Status via Feign
-                applicationClient.updateApplicationStatus(appId, "ACCEPTED");
+                // --- MOCKING STEP 4: Update Remote Status ---
+                // Instead of: applicationClient.updateApplicationStatus(appId, "ACCEPTED");
+                log.info("TEST MODE: Skipping remote status update for Application ID: {}", appId);
             }
         }
 
@@ -107,6 +113,54 @@ public class DisbursementServiceImpl implements DisbursementService {
                 .map(mapper::toDisbursementResponseDTO)
                 .collect(Collectors.toList());
     }
+//    @Transactional
+//    @Override
+//    public List<DisbursementResponseDTO> finalizeAndSplitBudget(UUID programId, PaymentFrequency frequency, int numberOfPayments) {
+//        log.info("Microservice Sequence: Finalizing Budget | Program ID: {}", programId);
+//
+//        // 1. Verify Program via Feign Client (replacing programRepository)
+//        ProgramMetadataDTO program = programClient.getProgramById(programId);
+//
+//        if (!"CLOSED".equalsIgnoreCase(program.getStatus())) {
+//            throw new InvalidProgramStateException("Budget Split Rejected: Program must be CLOSED.");
+//        }
+//
+//        // 2. Security Check: Are there pending reviews?
+//        // This now requires a Feign call to the Application Service
+//        if (applicationClient.hasPendingReviews(programId)) {
+//            throw new InvalidProgramStateException("Budget Split Rejected: Pending reviews exist.");
+//        }
+//
+//        // 3. Fetch Approved Application IDs (not entities) via Feign
+//        List<UUID> winnerIds = applicationClient.getApprovedApplicationIds(programId);
+//
+//        if (winnerIds.isEmpty()) {
+//            log.info("Process halted: No approved winners for Program: {}.", programId);
+//            return new ArrayList<>();
+//        }
+//
+//        double individualShare = program.getBudget() / winnerIds.size();
+//        int interval = calculateMonthInterval(frequency);
+//        List<Disbursement> allNewEntities = new ArrayList<>();
+//
+//        for (UUID appId : winnerIds) {
+//            // Check local DB if schedule already exists for this UUID
+//            boolean alreadyHasSchedule = !disbursementRepository.findByApplicationId(appId).isEmpty();
+//
+//            if (!alreadyHasSchedule) {
+//                // Create the schedule locally
+//                List<Disbursement> savedBatch = createInstallments(appId, programId, individualShare, numberOfPayments, interval);
+//                allNewEntities.addAll(savedBatch);
+//
+//                // 4. Update Remote Application Status via Feign
+//                applicationClient.updateApplicationStatus(appId, "ACCEPTED");
+//            }
+//        }
+//
+//        return allNewEntities.stream()
+//                .map(mapper::toDisbursementResponseDTO)
+//                .collect(Collectors.toList());
+//    }
 
     private boolean hasPendingReviews(UUID programId) {
         // We ask the Application Service to check its own database

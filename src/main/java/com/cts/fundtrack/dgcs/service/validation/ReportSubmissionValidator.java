@@ -36,31 +36,30 @@ public class ReportSubmissionValidator {
     private final GrantReportRepository grantReportRepository;
 
     public void validate(UUID applicationId) {
-        log.debug("Cardinality Validation Initiated | Assessing reporting eligibility for AppID: {}", applicationId);
+        log.debug("Assessing reporting eligibility for AppID: {}", applicationId);
 
-        // FIX: Use countByApplicationIdAndStatus (remove the underscore relationship)
+        // 1. How many payments have actually been finalized?
         long completedPayments = disbursementRepository.countByApplicationIdAndStatus(
                 applicationId, DisbursementStatus.PAID);
 
-        // FIX: Use countByApplicationIdAndStatus (remove the underscore relationship)
-        long existingReports = grantReportRepository.countByApplicationIdAndStatus(
-                applicationId,
-                GrantReportStatus.SUBMITTED
-        );
+        // 2. How many reports are currently in the system?
+        // We count SUBMITTED, UNDER_REVIEW, and APPROVED to ensure the user doesn't
+        // spam reports while one is still being checked by compliance.
+        long totalReportsInProcess = grantReportRepository.countByApplicationId(applicationId);
 
-        log.info("Eligibility Audit | AppID: {} | Approved Payments: {} | Existing Reports: {}",
-                applicationId, completedPayments, existingReports);
+        log.info("AppID: {} | Paid Installments: {} | Reports Found: {}",
+                applicationId, completedPayments, totalReportsInProcess);
 
-        // The Invariant Rule: Reports must never exceed the number of payments.
-        if (existingReports >= completedPayments) {
-            log.warn("Validation Failure: Report Saturation Reached | AppID: {} | Ratio: {}/{}",
-                    applicationId, existingReports, completedPayments);
-
-            throw new ReportEligibilityException("Submission Blocked: You have already fulfilled reporting requirements " +
-                    "for your current disbursements.");
+        // RULE: You cannot report on a disbursement that hasn't happened yet.
+        if (completedPayments == 0) {
+            throw new ReportEligibilityException("Submission Blocked: No payments have been disbursed yet.");
         }
 
-        log.info("Cardinality Validation Passed | AppID: {} | Ratio: {}/{}",
-                applicationId, existingReports, completedPayments);
+        // RULE: You can only have one report per disbursement.
+        // If reports >= payments, they have either already reported on the current money
+        // or they are trying to report on money they haven't received.
+        if (totalReportsInProcess >= completedPayments) {
+            throw new ReportEligibilityException("Submission Blocked: Reporting requirements fulfilled for current disbursements.");
+        }
     }
 }

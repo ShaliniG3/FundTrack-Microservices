@@ -15,12 +15,15 @@ public abstract class ModuleMapper {
     @Autowired
     protected EncryptionUtil encryptionUtil;
 
+    // FIX 1: Map directly from disbursementId and applicationId fields
     @Mapping(target = "id", source = "disbursementId")
-    @Mapping(target = "applicationId", source = "application.applicationId")
+    @Mapping(target = "applicationId", source = "applicationId")
     public abstract DisbursementResponseDTO toDisbursementResponseDTO(Disbursement entity);
 
+    // FIX 2: If 'payment' contains 'disbursementId' directly, use that.
+    // If it is nested, use 'payment.disbursementId' to be explicit.
     @Mapping(target = "encryptedPaymentId", expression = "java(encryptionUtil.encrypt(payment.getPaymentId()))")
-    @Mapping(target = "disbursementId", source = "disbursement.disbursementId")
+    @Mapping(target = "disbursementId", source = "payment.disbursementId")
     public abstract PaymentResponseDTO toPaymentResponseDTO(Payment payment);
 
 }

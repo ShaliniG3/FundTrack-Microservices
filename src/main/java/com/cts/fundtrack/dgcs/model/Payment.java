@@ -2,6 +2,7 @@ package com.cts.fundtrack.dgcs.model;
 
 import com.cts.fundtrack.dgcs.model.enums.PaymentMethod;
 import com.cts.fundtrack.dgcs.model.enums.PaymentStatus;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -9,8 +10,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Entity representing a realized financial transaction.
- * Converted to Microservice: Replaced Disbursement relationship with UUID.
+ * Persistence entity representing a realized financial transaction.
+ * <p>
+ * This model records the actual movement of funds following a disbursement approval.
+ * In this microservice-oriented architecture, it maintains a logical link to the
+ * parent installment via a disbursement UUID, ensuring strict financial reconciliation
+ * and preventing duplicate payments for the same milestone.
+ * </p>
  */
 @Entity
 @Table(name = "payments")

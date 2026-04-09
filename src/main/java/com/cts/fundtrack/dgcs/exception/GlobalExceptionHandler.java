@@ -312,7 +312,16 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
     }
+    @ExceptionHandler(InvalidFileException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidFile(InvalidFileException ex, HttpServletRequest request) {
+        log.warn("Invalid File Upload | Path: {} | Reason: {}", request.getRequestURI(), ex.getMessage());
 
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+    }
     /**
      * Handles failures in persisting report metadata after file operations.
      * This indicates a synchronization failure between the storage layer and the database.

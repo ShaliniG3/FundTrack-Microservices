@@ -90,7 +90,7 @@ public class ComplianceServiceImpl implements ComplianceService {
         // Business Rule: Audit Integrity Guard
         if (report.getStatus() == GrantReportStatus.APPROVED || report.getStatus() == GrantReportStatus.REJECTED) {
             log.warn("Integrity Violation: Attempted re-audit of terminal state | Report ID: {} | Current Status: {}",
-                    report.getReportId(), report.getStatus());
+                    report.getGrantReportId(), report.getStatus());
             throw new ReportLockedException("Audit Denied: This report has already been reviewed and reached a terminal state.");
         }
 
@@ -102,7 +102,7 @@ public class ComplianceServiceImpl implements ComplianceService {
         }
 
         ComplianceCheck check = ComplianceCheck.builder()
-                .grantReportId(report.getReportId())
+                .grantReportId(report.getGrantReportId())
 
                 .applicationId(report.getApplicationId())
                 .complianceOfficerId(dto.getComplianceOfficerId()) // Captured from the request
@@ -132,7 +132,7 @@ public class ComplianceServiceImpl implements ComplianceService {
 
         grantReportRepository.save(report);
         log.info("Audit Workflow Finalized | Report ID: {} | Transition: {} -> {} ",
-                report.getReportId(), previousStatus, report.getStatus());
+                report.getGrantReportId(), previousStatus, report.getStatus());
 
         return "Audit complete. Report status synchronized to: " + report.getStatus();
     }
@@ -211,21 +211,21 @@ public class ComplianceServiceImpl implements ComplianceService {
         return grantReportRepository.findById(reportId)
                 .map(report -> {
                     try {
-                        log.debug("Data Mapping | Projecting Entity [{}] to Response DTO.", report.getReportId());
+                        log.debug("Data Mapping | Projecting Entity [{}] to Response DTO.", report.getGrantReportId());
 
                         return GrantReportResponseDTO.builder()
-                                .reportId(report.getReportId())
+                                .grantReportId(report.getGrantReportId())
                                 .applicationId(report.getApplicationId())
                                 .scope(report.getScope())
                                 .metrics(report.getMetrics())
                                 .status(report.getStatus() != null ? report.getStatus().name() : "PENDING")
-                                .pdfPath(report.getProofPath())
-                                .message("Administrative report summary resolved successfully.")
+                                .documentUrl(report.getProofPath())
+                                .acknowledgment("Administrative report summary resolved successfully.")
                                 .build();
                     } catch (Exception e) {
                         // Internal Catch: Mapping failure (e.g., LazyInitializationException)
-                        log.error("Mapping Failure | Structural error resolving Report ID: {}", report.getReportId());
-                        throw new ComplianceDataException("Internal Error: Failed to project report data for ID: " + report.getReportId());
+                        log.error("Mapping Failure | Structural error resolving Report ID: {}", report.getGrantReportId());
+                        throw new ComplianceDataException("Internal Error: Failed to project report data for ID: " + report.getGrantReportId());
                     }
                 })
                 .orElseThrow(() -> {
@@ -280,14 +280,14 @@ public class ComplianceServiceImpl implements ComplianceService {
                     })
                     .map(appId -> {
                         long paidInstallments = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
-                        ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
+                        //ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
                         // Note: In a real microservice, you'd call 'ApplicationService'
                         // here to get names. For now, we use placeholders or IDs.
                         return ApplicantComplianceDTO.builder()
                                 .applicationId(appId)
-                                .applicantName(metadata.getApplicantName())
-                                .programName(metadata.getProgramName())
-                                .applicationStatus(metadata.getStatus())
+                                .applicantName("metadata.getApplicantName()")
+                                .programName("metadata.getProgramName()")
+                                .applicationStatus("metadata.getStatus()")
                                 .latestReportStatus("DELINQUENT_SUBMISSION_REQUIRED")
                                 .currentInstallment((int) paidInstallments)
                                 .build();
@@ -391,14 +391,14 @@ public class ComplianceServiceImpl implements ComplianceService {
 
                     String complianceStatus = resolveStatus(reports, paidInstallments);
 
-                    ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
+                   // ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
                     // 3. Mapping: Note that Name/Program metadata must be fetched from an external service
                     // or represented by the ID in this decoupled version.
                     return ApplicantComplianceDTO.builder()
                             .applicationId(appId)
-                            .applicantName(metadata.getApplicantName()) // Placeholder for Feign/Rest call
-                            .programName(metadata.getProgramName())
-                            .applicationStatus(metadata.getStatus())
+                            .applicantName("metadata.getApplicantName()") // Placeholder for Feign/Rest call
+                            .programName("metadata.getProgramName()")
+                            .applicationStatus("metadata.getStatus()")
                             .latestReportStatus(complianceStatus)
                             .currentInstallment((int) paidInstallments)
                             .build();
@@ -457,7 +457,7 @@ public class ComplianceServiceImpl implements ComplianceService {
                 .findFirst()
                 .map(report -> {
                     log.debug("Status Resolution | Scenario: Active | Latest Report ID: {} | Status: {}",
-                            report.getReportId(), report.getStatus());
+                            report.getGrantReportId(), report.getStatus());
                     return report.getStatus().name();
                 })
                 .orElseGet(() -> {

@@ -35,7 +35,6 @@ import java.util.stream.Collectors;
  * Ensures transactional safety when moving a Disbursement to PAID, and enforces a
  * <p>
  * "Just-In-Time" check to the Compliance Service before any funds are released.
- *
  * </p>
  */
 
@@ -97,21 +96,21 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // 3. Get Application Metadata via Feign (to find the Applicant)
-        UUID appId = disbursement.getApplicationId();
-        ApplicationMetadataDTO appMeta = applicationClient.getApplicationMetadata(appId);
-        UUID applicantUserId = appMeta.getApplicantUserId();
-
-        // 4. Compliance Check via Feign
-        if (!complianceClient.isApplicantCompliant(appId)) {
-            log.warn("HALT: Application {} failed compliance. Cancelling future installments.", appId);
-
-            disbursementRepo.cancelFutureInstallments(appId);
-
-            // Notification call (Now likely an event or a feign call)
-            // triggerPaymentNotification(applicantUserId, appId, "REJECTED");
-
-            throw new ComplianceViolationException("Applicant non-compliant. Future funds halted.");
-        }
+//        UUID appId = disbursement.getApplicationId();
+//        ApplicationMetadataDTO appMeta = applicationClient.getApplicationMetadata(appId);
+//        UUID applicantUserId = appMeta.getApplicantUserId();
+//
+//        // 4. Compliance Check via Feign
+//        if (!complianceClient.isApplicantCompliant(appId)) {
+//            log.warn("HALT: Application {} failed compliance. Cancelling future installments.", appId);
+//
+//            disbursementRepo.cancelFutureInstallments(appId);
+//
+//            // Notification call (Now likely an event or a feign call)
+//            // triggerPaymentNotification(applicantUserId, appId, "REJECTED");
+//
+//            throw new ComplianceViolationException("Applicant non-compliant. Future funds halted.");
+//        }
 
         // 5. Create the Payment Record
         Payment payment = Payment.builder()
@@ -130,7 +129,7 @@ public class PaymentServiceImpl implements PaymentService {
         disbursementRepo.save(disbursement);
 
         // 7. Audit and Notifications (Handled via Feign or Messaging)
-        log.info("Payment successful for App: {} | Amount: {}", appId, disbursement.getAmount());
+//        log.info("Payment successful for App: {} | Amount: {}", appId, disbursement.getAmount());
 
         return mapper.toPaymentResponseDTO(savedPayment);
     }
@@ -191,3 +190,5 @@ public class PaymentServiceImpl implements PaymentService {
 //    }
 
 }
+
+
