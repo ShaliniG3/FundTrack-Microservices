@@ -82,16 +82,16 @@ public class GrantReportServiceImpl implements GrantReportService {
         log.info("Process Start: Report Submission | Application: {}", dto.getApplicationId());
 
         // 1. VERIFY APPLICATION STATUS
-//        ApplicationMetadataDTO applicationMetadata = applicationClient.getApplicationMetadata(dto.getApplicationId());
-//
-//        if (applicationMetadata == null || "SYSTEM_TEMPORARILY_UNAVAILABLE".equals(applicationMetadata.getApplicantName())) {
-//            log.error("Handshake Failed: Application Service unreachable for ID: {}", dto.getApplicationId());
-//            throw new ApplicationNotFoundException("Reporting is temporarily disabled: Could not verify application status.");
-//        }
-//
-//        if ("REJECTED".equalsIgnoreCase(applicationMetadata.getStatus()) || "CLOSED".equalsIgnoreCase(applicationMetadata.getStatus())) {
-//            throw new ReportEligibilityException("Submission Blocked: This application is no longer active.");
-//        }
+        ApplicationMetadataDTO applicationMetadata = applicationClient.getApplicationMetadata(dto.getApplicationId());
+
+        if (applicationMetadata == null || "SYSTEM_TEMPORARILY_UNAVAILABLE".equals(applicationMetadata.getApplicantName())) {
+            log.error("Handshake Failed: Application Service unreachable for ID: {}", dto.getApplicationId());
+            throw new ApplicationNotFoundException("Reporting is temporarily disabled: Could not verify application status.");
+        }
+
+        if ("REJECTED".equalsIgnoreCase(applicationMetadata.getStatus()) || "CLOSED".equalsIgnoreCase(applicationMetadata.getStatus())) {
+            throw new ReportEligibilityException("Submission Blocked: This application is no longer active.");
+        }
 
         // 2. CHECK BUSINESS RULES
         try {
@@ -155,15 +155,15 @@ public class GrantReportServiceImpl implements GrantReportService {
     @Transactional(readOnly = true)
     public List<GrantReportResponseDTO> getMyGrantReports(UUID applicationId) {
         log.info("Request: Resolve history for Application ID: {}", applicationId);
-//
-//        // 1. VALIDATE APPLICATION EXISTENCE
-//        try {
-//            log.debug("Validation: Verifying application existence via Feign Client.");
-//            applicationClient.getApplicationMetadata(applicationId);
-//        } catch (Exception e) {
-//            log.error("External Handshake Failed | Application ID: {} | Error: {}", applicationId, e.getMessage());
-//            throw new ApplicationNotFoundException("Resource not found: The provided Application ID is invalid or unregistered.");
-//        }
+
+        // 1. VALIDATE APPLICATION EXISTENCE
+        try {
+            log.debug("Validation: Verifying application existence via Feign Client.");
+            applicationClient.getApplicationMetadata(applicationId);
+        } catch (Exception e) {
+            log.error("External Handshake Failed | Application ID: {} | Error: {}", applicationId, e.getMessage());
+            throw new ApplicationNotFoundException("Resource not found: The provided Application ID is invalid or unregistered.");
+        }
 
         // 2. RETRIEVE LOCAL RECORDS
         try {
@@ -214,7 +214,7 @@ public class GrantReportServiceImpl implements GrantReportService {
         }
         return GrantReportResponseDTO.builder()
                 .grantReportId(report.getGrantReportId())
-                .applicationId(report.getApplicationId()) // Direct ID mapping
+                .applicationId(report.getApplicationId())
                 .scope(report.getScope())
                 .metrics(report.getMetrics())
                 .status(report.getStatus().name())

@@ -99,15 +99,15 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // 3. COMPLIANCE & METADATA (ORCHESTRATION VIA FEIGN)
-        // UUID appId = disbursement.getApplicationId();
-        // ApplicationMetadataDTO appMeta = applicationClient.getApplicationMetadata(appId);
+         UUID appId = disbursement.getApplicationId();
+         ApplicationMetadataDTO appMeta = applicationClient.getApplicationMetadata(appId);
 
-        // log.debug("Validation: Running compliance check for Application: {}", appId);
-        // if (!complianceClient.isApplicantCompliant(appId)) {
-        //     log.error("Compliance Failure: Application {} is non-compliant. Halting funds.", appId);
-        //     disbursementRepository.cancelFutureInstallments(appId);
-        //     throw new ComplianceViolationException("Applicant non-compliant. Future funds halted.");
-        // }
+         log.debug("Validation: Running compliance check for Application: {}", appId);
+         if (!complianceClient.isApplicantCompliant(appId)) {
+             log.error("Compliance Failure: Application {} is non-compliant. Halting funds.", appId);
+             disbursementRepository.cancelFutureInstallments(appId);
+             throw new ComplianceViolationException("Applicant non-compliant. Future funds halted.");
+         }
 
         // 4. PERSIST PAYMENT TRANSACTION
         log.debug("Persistence: Creating payment record for amount: {}", disbursement.getAmount());

@@ -266,14 +266,14 @@ public class ComplianceServiceImpl implements ComplianceService {
                     .map(appId -> {
                         // 3. Build the compliance record for flagged applicants
                         long paidInstallments = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
-                        //ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
+                        ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
                         // Note: In a real microservice, you'd call 'ApplicationService'
                         // here to get names. For now, we use placeholders or IDs.
                         return ApplicantComplianceDTO.builder()
                                 .applicationId(appId)
-                                .applicantName("metadata.getApplicantName()")
-                                .programName("metadata.getProgramName()")
-                                .applicationStatus("metadata.getStatus()")
+                                .applicantName(metadata.getApplicantName())
+                                .programName(metadata.getProgramName())
+                                .applicationStatus(metadata.getStatus())
                                 .latestReportStatus("DELINQUENT_SUBMISSION_REQUIRED")
                                 .currentInstallment((int) paidInstallments)
                                 .build();
@@ -362,12 +362,12 @@ public class ComplianceServiceImpl implements ComplianceService {
                     String complianceStatus = resolveStatus(reports, paidInstallments);
 
                     // 4. Build the summary record for this specific application
-                   // ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
+                    ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
                     return ApplicantComplianceDTO.builder()
                             .applicationId(appId)
-                            .applicantName("metadata.getApplicantName()") // Placeholder for Feign/Rest call
-                            .programName("metadata.getProgramName()")
-                            .applicationStatus("metadata.getStatus()")
+                            .applicantName(metadata.getApplicantName()) // Placeholder for Feign/Rest call
+                            .programName(metadata.getProgramName())
+                            .applicationStatus(metadata.getStatus())
                             .latestReportStatus(complianceStatus)
                             .currentInstallment((int) paidInstallments)
                             .build();
