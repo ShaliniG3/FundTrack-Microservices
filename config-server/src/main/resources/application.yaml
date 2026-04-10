@@ -11,4 +11,4 @@ spring:
       server:
         native:
           # Point directly to the folder containing your .yml files
-          search-locations: file:///C:/Users/2479399/Downloads/config-server/config-repo
+          search-locations: file:///C:/Users/2479765/FundTrack-Microservices/config-repo
