@@ -1,0 +1,24 @@
+server:
+  port: 9094
+
+spring:
+  application:
+    name: notification-service
+  config:
+    import: "optional:configserver:http://localhost:8888"
+
+  cloud:
+    config:
+      fail-fast: true
+
+  # 1. Change 'datasource' to 'r2dbc'
+  r2dbc:
+    url: r2dbc:mysql://localhost:3306/notification_db?serverZoneId=Asia/Kolkata
+    username: root
+    password: WilliamAsher@24
+
+  # 2. DELETE 'jpa' section. R2DBC does not use Hibernate/JPA.
+  # To handle table creation, use 'sql.init'
+  sql:
+    init:
+      mode: always # This will look for schema.sql in src/main/resources
