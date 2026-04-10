@@ -18,8 +18,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-//import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+//import org.springframework.security.access.prepost.PreAuthorize;
 
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,7 +37,7 @@ import java.util.UUID;
  */
 
 @RestController
-@RequestMapping("/api/v1/reports")
+@RequestMapping("/api/v1/grant_report")
 @Slf4j
 @RequiredArgsConstructor
 @Tag(
@@ -67,7 +68,7 @@ public class GrantReportController {
     )
 
     // @PreAuthorize("hasRole('APPLICANT') and @securityService.isApplicationOwner(#dto.applicationId)")
-    @PostMapping(value = "/grant_report", consumes = {"multipart/form-data"})
+    @PostMapping(value = "/my_report", consumes = {"multipart/form-data"})
     public ResponseEntity<GrantReportResponseDTO> submitGrantReport(
             @RequestPart("data") @Valid GrantReportRequestDTO dto,
             @RequestPart("proof") MultipartFile proof) {
@@ -94,27 +95,28 @@ public class GrantReportController {
      */
 
     @Operation(
-            summary = "Retrieve report history",
-            description = "Returns all progress reports that have been previously submitted "
-                    + "for the specified grant application.",
+            summary = "Retrieve Report History",
+            description = "Returns a complete list of all progress reports submitted for the specified application. "
+                    + "Results include metadata and document paths for audit purposes. "
+                    + "Restricted to Application Owners, Compliance Officers, and Admins.",
             responses = {
-                    @ApiResponse(responseCode = "200", description = "History successfully resolved"),
-                    @ApiResponse(responseCode = "404", description = "Application context not found")
+                    @ApiResponse(responseCode = "200", description = "Report history successfully retrieved"),
+                    @ApiResponse(responseCode = "403", description = "Forbidden: User is not authorized to access this history"),
+                    @ApiResponse(responseCode = "404", description = "Not Found: The associated Application ID does not exist"),
+                    @ApiResponse(responseCode = "500", description = "Internal Server Error: Failed to resolve history from storage")
             }
     )
 
     // @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN') or " +
     //       "(hasRole('APPLICANT') and @securityService.isApplicationOwner(#applicationId))")
-    @GetMapping("/grant_reports/{applicationId}")
+    @GetMapping("/my_reports/{applicationId}")
     public ResponseEntity<List<GrantReportResponseDTO>> getMyGrantReports(
             @PathVariable UUID applicationId) {
 
         log.info("Ingress Request | GET /api/v1/reports/{} | ApplicationID: {}", applicationId, applicationId);
 
-        // Fetch history from service
         List<GrantReportResponseDTO> history = grantReportService.getMyGrantReports(applicationId);
 
-        // If history is null, provide an empty list to satisfy the Non-null type argument
         List<GrantReportResponseDTO> safeHistory = (history != null) ? history : List.of();
 
         log.info("Records Retrieved: {}", safeHistory.size());

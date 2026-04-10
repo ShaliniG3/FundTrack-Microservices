@@ -3,7 +3,6 @@ package com.cts.fundtrack.dgcs.client.programclient;
 import com.cts.fundtrack.dgcs.client.dto.ProgramMetadataDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.GetMapping;
 
 import java.util.UUID;
 

@@ -20,8 +20,13 @@ public class ComplianceValidator {
     private final GrantReportRepository grantReportRepository;
 
     /**
-     * Microservice logic: Validates compliance using raw UUIDs.
-     * Enforces the rule: Released installments (PAID) must match approved reporting.
+     * Verifies if an application is compliant with the mandatory reporting policy.
+     * <p>
+     * Sequence: Structural Check -> Financial Progress Analysis -> Document History Resolution -> Gap Analysis -> Policy Alignment.
+     * </p>
+     *
+     * @param applicationId The unique identifier for the grant application.
+     * @return {@code true} if the application meets all reporting and payment alignment rules; {@code false} otherwise.
      */
     public boolean verifyCompliance(UUID applicationId) {
 

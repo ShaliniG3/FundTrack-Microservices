@@ -1,6 +1,7 @@
 package com.cts.fundtrack.dgcs.dto.compliancedto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,12 +10,15 @@ import lombok.NoArgsConstructor;
 import java.util.UUID;
 
 /**
- * DTO representing applicant‑level compliance information for dashboards and audit views.
+ * Data Transfer Object representing applicant-level compliance information for dashboards.
  * <p>
- * Used to display program status, reporting progress, and compliance indicators
- * for each applicant within a grant program.
+ * This model serves as a consolidated view for the Compliance Workbench,
+ * aggregating application status, program metadata, and reporting progress.
+ * It enables Compliance Officers to efficiently monitor the fiduciary
+ * standing of various grant recipients.
  * </p>
  */
+
 @Data
 @Builder
 @NoArgsConstructor

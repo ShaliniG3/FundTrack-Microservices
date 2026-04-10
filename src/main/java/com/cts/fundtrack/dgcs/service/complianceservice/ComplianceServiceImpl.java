@@ -1,14 +1,15 @@
 package com.cts.fundtrack.dgcs.service.complianceservice;
 
-
 import com.cts.fundtrack.dgcs.client.applicationclient.ApplicationClient;
 import com.cts.fundtrack.dgcs.client.dto.ApplicationMetadataDTO;
+
 import com.cts.fundtrack.dgcs.dto.compliancedto.ApplicantComplianceDTO;
 import com.cts.fundtrack.dgcs.dto.compliancedto.ComplianceCheckRequestDTO;
+import com.cts.fundtrack.dgcs.dto.compliancedto.ComplianceCheckResponseDTO;
 import com.cts.fundtrack.dgcs.dto.compliancedto.ComplianceHistoryDTO;
 import com.cts.fundtrack.dgcs.dto.grantreportdto.GrantReportResponseDTO;
-import com.cts.fundtrack.dgcs.exception.*;
 
+import com.cts.fundtrack.dgcs.exception.*;
 import com.cts.fundtrack.dgcs.model.ComplianceCheck;
 import com.cts.fundtrack.dgcs.model.GrantReport;
 import com.cts.fundtrack.dgcs.model.enums.ComplianceStatus;
@@ -19,8 +20,8 @@ import com.cts.fundtrack.dgcs.repository.compliancecheckrepository.ComplianceChe
 import com.cts.fundtrack.dgcs.repository.disbursementrepository.DisbursementRepository;
 import com.cts.fundtrack.dgcs.repository.grantreportrepository.GrantReportRepository;
 
-
 import com.cts.fundtrack.dgcs.service.validation.ComplianceValidator;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-
 
 /**
  * Enterprise-grade implementation of the {@link ComplianceService} interface.
@@ -55,11 +55,10 @@ public class ComplianceServiceImpl implements ComplianceService {
 
     private final ComplianceCheckRepository complianceCheckRepository;
     private final GrantReportRepository grantReportRepository;
-
     private final DisbursementRepository disbursementRepository;
     private final ApplicationClient applicationClient;
-    //
- private final ComplianceValidator complianceValidator;
+    private final ComplianceValidator complianceValidator;
+
     /**
      * {@inheritDoc}
      * <p>
@@ -77,23 +76,24 @@ public class ComplianceServiceImpl implements ComplianceService {
      */
     @Override
     @Transactional
-    public String recordAudit(ComplianceCheckRequestDTO dto) {
+    public ComplianceCheckResponseDTO recordAudit(ComplianceCheckRequestDTO dto) {
         log.info("Audit Workflow Initiated | Report ID: {} | Verdict: {}", dto.getGrantReportId(), dto.getStatus());
 
+        // 1. Fetch the report from the database
         GrantReport report = grantReportRepository.findById(dto.getGrantReportId())
                 .orElseThrow(() -> {
                     log.error("Audit Aborted: Resource resolution failed for Report ID: {}", dto.getGrantReportId());
-
                     return new GrantReportNotFoundException("Report not found with ID: " + dto.getGrantReportId());
                 });
 
-        // Business Rule: Audit Integrity Guard
+        // 2. Ensure the report hasn't been audited already
         if (report.getStatus() == GrantReportStatus.APPROVED || report.getStatus() == GrantReportStatus.REJECTED) {
             log.warn("Integrity Violation: Attempted re-audit of terminal state | Report ID: {} | Current Status: {}",
                     report.getGrantReportId(), report.getStatus());
-            throw new ReportLockedException("Audit Denied: This report has already been reviewed and reached a terminal state.");
+            throw new ReportLockedException("Audit Denied: This report has already been reviewed.");
         }
 
+        // 3. Convert the input status into a system-readable format
         ComplianceStatus auditResult;
         try {
             auditResult = ComplianceStatus.valueOf(dto.getStatus().toUpperCase());
@@ -101,11 +101,11 @@ public class ComplianceServiceImpl implements ComplianceService {
             throw new InvalidInputException("Invalid status provided: " + dto.getStatus());
         }
 
+        // 4. Create and save the new audit record
         ComplianceCheck check = ComplianceCheck.builder()
                 .grantReportId(report.getGrantReportId())
-
                 .applicationId(report.getApplicationId())
-                .complianceOfficerId(dto.getComplianceOfficerId()) // Captured from the request
+                .complianceOfficerId(dto.getComplianceOfficerId())
                 .type(dto.getType())
                 .result(auditResult)
                 .notes(dto.getComments())
@@ -115,42 +115,43 @@ public class ComplianceServiceImpl implements ComplianceService {
         complianceCheckRepository.save(check);
         log.debug("Audit Record Persisted: Check ID {} for Application ID {}", check.getCheckId(), report.getApplicationId());
 
-
+        // 5. Update the report's status based on the audit result
         GrantReportStatus previousStatus = report.getStatus();
 
-
-
-        if ("COMPLIANCE".equalsIgnoreCase(dto.getStatus())) {
+        if (auditResult == ComplianceStatus.COMPLIANCE) {
             report.setStatus(GrantReportStatus.APPROVED);
-        } else if ("NON_COMPLIANT".equalsIgnoreCase(dto.getStatus())) {
+        } else if (auditResult == ComplianceStatus.NON_COMPLIANT) {
             report.setStatus(GrantReportStatus.REJECTED);
-        } else {
-
-            log.error("Invalid Status Transition Attempted | Received: {}", dto.getStatus());
-            throw new InvalidInputException("Invalid status: Use 'APPROVED' or 'REJECTED' only.");
         }
 
         grantReportRepository.save(report);
+
         log.info("Audit Workflow Finalized | Report ID: {} | Transition: {} -> {} ",
                 report.getGrantReportId(), previousStatus, report.getStatus());
 
-        return "Audit complete. Report status synchronized to: " + report.getStatus();
+        // 6. Build and return the final summary to the caller
+        return ComplianceCheckResponseDTO.builder()
+                .checkId(check.getCheckId())
+                .grantReportId(check.getGrantReportId())
+                .status(check.getResult())
+                .reportStatus(report.getStatus())
+                .auditDate(check.getDate())
+                .remarks(check.getNotes())
+                .build();
     }
 
-
-
-
     /**
-     * {@inheritDoc}
+     * Retrieves a complete history of all audits performed by a specific compliance officer.
      * <p>
-     * Aggregates a read-only historical ledger of all finalized compliance audits.
-     * This serves as the primary data source for external regulatory exports.
+     * This method provides a chronological view of past decisions (APPROVED/REJECTED),
+     * acting as the primary source for regulatory reporting and internal tracking.
      * </p>
-     * <p>
-     * <b>Audit Context:</b> Returns chronological records of all 'APPROVED' and 'REJECTED'
-     * report outcomes across the entire system.
-     * </p>
+     *
+     * @param complianceOfficerId The unique identifier of the officer whose history is being requested.
+     * @return A list of historical audit records, or an empty list if no audits have been performed.
+     * @throws DataExportException If a system error prevents the retrieval of the audit records.
      */
+
     @Override
     @Transactional(readOnly = true)
     public List<ComplianceHistoryDTO> getComplianceHistoryByOfficer(UUID complianceOfficerId) {
@@ -158,61 +159,53 @@ public class ComplianceServiceImpl implements ComplianceService {
         log.info("Compliance Audit Retrieval | Target Officer ID: {}", complianceOfficerId);
 
         try {
-            // Fetch records specifically for this Compliance Officer
+            // 1. Fetch all audit records linked to this officer
             List<ComplianceCheck> checks = complianceCheckRepository.findByComplianceOfficerId(complianceOfficerId);
 
             if (checks.isEmpty()) {
-                log.info("Compliance Audit Retrieval | Result: No records found for Officer: {}", complianceOfficerId);
+                log.info("Audit History Search | Result: No history found for Officer: {}", complianceOfficerId);
                 return List.of();
             }
 
-            // Mapping the entities to your History DTOs
+            // 2. Transform the database records into a readable history format
             List<ComplianceHistoryDTO> history = checks.stream()
                     .map(this::mapToHistoryDTO)
                     .toList();
 
-            log.info("Compliance Audit Retrieval | Successful: {} records retrieved for Officer: {}",
+            log.info("Audit History Search | Completed: Found {} records for Officer: {}",
                     history.size(), complianceOfficerId);
 
             return history;
 
         } catch (Exception e) {
-            log.error("Compliance Audit Retrieval Failure | Critical error for Officer ID: {}", complianceOfficerId, e);
-            throw new DataExportException("The system failed to retrieve audit history for the specified compliance officer.");
+            log.error("Audit History Search | Failed for Officer ID: {}", complianceOfficerId, e);
+            throw new DataExportException("Could not retrieve audit history. Please try again later.");
         }
     }
 
     /**
-     * Resolves a high-fidelity summary of a specific grant report for formal audit evaluation.
+     * Retrieves a detailed summary of a grant report for the compliance officer to review.
      * <p>
-     * This method acts as the primary data orchestrator for the Compliance Officer's review
-     * interface, projecting internal persistence entities into sanitized DTOs.
-     * </p>
-     * <p>
-     * <b>Operational Guardrails:</b>
-     * <ul>
-     * <li><b>Relational Integrity:</b> Enforces safe navigation during application context resolution.</li>
-     * <li><b>Audit Traceability:</b> Every access attempt is logged at the {@code INFO} level for forensic history.</li>
-     * <li><b>Defensive Mapping:</b> Normalizes null or inconsistent Enum states to a stable "PENDING" baseline.</li>
-     * </ul>
+     * This method prepares all the necessary data for the audit screen, ensuring that
+     * internal database records are converted into a clean, safe format for the user interface.
      * </p>
      *
-     * @param reportId The unique {@link UUID} of the target Grant Report.
-     * @return A fully populated {@link GrantReportResponseDTO} containing enriched audit context.
-     * @throws GrantReportNotFoundException If the identifier does not correlate to an existing record.
-     * @throws ComplianceDataException If a critical structural failure occurs during the mapping phase.
+     * @param reportId The unique ID of the report being reviewed.
+     * @return A summarized view of the report including its status and attached documents.
+     * @throws GrantReportNotFoundException If the report ID does not exist in our records.
+     * @throws ComplianceDataException If the system encounters an error while organizing the report data.
      */
     @Override
     @Transactional(readOnly = true)
     public GrantReportResponseDTO getGrantReportSummary(UUID reportId) {
-        // 1. Ingress Logging: Providing a forensic trail for administrative access
-        log.info("Forensic Access | Initiating snapshot retrieval for Report ID: {}", reportId);
+        // 1. Log the start of the retrieval process for tracking purposes
+        log.info("Report Lookup | Starting search for Report ID: {}", reportId);
 
         return grantReportRepository.findById(reportId)
                 .map(report -> {
                     try {
                         log.debug("Data Mapping | Projecting Entity [{}] to Response DTO.", report.getGrantReportId());
-
+                        // 2. Build the summary and ensure the status is never blank
                         return GrantReportResponseDTO.builder()
                                 .grantReportId(report.getGrantReportId())
                                 .applicationId(report.getApplicationId())
@@ -223,48 +216,40 @@ public class ComplianceServiceImpl implements ComplianceService {
                                 .acknowledgment("Administrative report summary resolved successfully.")
                                 .build();
                     } catch (Exception e) {
-                        // Internal Catch: Mapping failure (e.g., LazyInitializationException)
-                        log.error("Mapping Failure | Structural error resolving Report ID: {}", report.getGrantReportId());
-                        throw new ComplianceDataException("Internal Error: Failed to project report data for ID: " + report.getGrantReportId());
+                        // 3. Handle any unexpected errors during data conversion
+                        log.error("Data Mapping Error | Failed to process Report ID: {}", report.getGrantReportId());
+                        throw new ComplianceDataException("The system could not process the report data for ID: " + report.getGrantReportId());
                     }
+
                 })
                 .orElseThrow(() -> {
-                    // Egress Logging: Documenting a failed resolution attempt
-                    log.warn("Resolution Failure | Target Report ID [{}] does not exist in the persistence layer.", reportId);
-                    return new GrantReportNotFoundException("Audit Error: Target report not found for ID: " + reportId);
+                    // 4. Log and throw an error if the report is missing
+                    log.warn("Report Lookup Failed | Report ID {} was not found.", reportId);
+                    return new GrantReportNotFoundException("Could not find a report with ID: " + reportId);
                 });
     }
+
     /**
-     * Executes a cross-reference audit between financial disbursements and reporting submissions
-     * to isolate applicants in a delinquent reporting state.
+     * Identifies applicants who have received funding but have not yet submitted their required progress reports.
      * <p>
-     * <b>Business Logic:</b> An applicant is flagged if the count of {@code COMPLETED}
-     * disbursements exceeds the count of successfully submitted {@link GrantReport} entities.
-     * </p>
-     * <p>
-     * <b>Operational Characteristics:</b>
-     * <ul>
-     * <li><b>Transaction Isolation:</b> Read-only execution to ensure zero impact on database lock contention.</li>
-     * <li><b>Integrity Guard:</b> Validates program existence before initiating resource-intensive scans.</li>
-     * <li><b>Traceability:</b> Logs forensic markers for audit volume and delinquency identification.</li>
-     * </ul>
+     * <b>Logic:</b> An applicant is flagged as "delinquent" if the number of payments they have received
+     * is greater than the number of reports they have submitted.
      * </p>
      *
-     * @param programId The unique {@link UUID} of the funding program to be audited.
-     * @return A {@link List} of {@link ApplicantComplianceDTO} identifying delinquent entities.
-     * @throws ProgramNotFoundException If the target Program ID does not exist.
-     * @throws ComplianceViolationException If the audit detects structural data inconsistencies.
+     * @param programId The ID of the funding program to check.
+     * @return A list of applicants who are currently behind on their reporting requirements.
+     * @throws ProgramNotFoundException If the program ID provided is not valid.
+     * @throws ComplianceViolationException If there is a system error during the check.
      */
     @Override
     @Transactional(readOnly = true)
     public List<ApplicantComplianceDTO> getNonSubmittingApplicants(UUID programId) {
         log.info("Compliance Scan Initiated | Target Program: {}", programId);
 
-        // 1. Get all unique application IDs for this program that have DISBURSEMENTS
-        // Note: You need this custom query in your DisbursementRepository
+        // 1. Find all applications in this program that have received payments
         List<UUID> applicationIds = disbursementRepository.findDistinctApplicationIdsByProgramId(programId);
 
-        log.info("Scan Execution | Analyzing {} active applications for delinquency.", applicationIds.size());
+        log.info("Delinquency Scan | Checking {} applications for missing reports.", applicationIds.size());
 
         if (applicationIds.isEmpty()) {
             return List.of();
@@ -273,12 +258,13 @@ public class ComplianceServiceImpl implements ComplianceService {
         try {
             return applicationIds.stream()
                     .filter(appId -> {
-                        // Logic: Paid installments > Submitted reports
+                        // 2. Identify delinquency: Has the applicant been paid more times than they've reported?
                         long paidCount = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
                         long reportCount = grantReportRepository.countByApplicationId(appId);
                         return paidCount > reportCount;
                     })
                     .map(appId -> {
+                        // 3. Build the compliance record for flagged applicants
                         long paidInstallments = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
                         //ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
                         // Note: In a real microservice, you'd call 'ApplicationService'
@@ -295,41 +281,32 @@ public class ComplianceServiceImpl implements ComplianceService {
                     .toList();
 
         } catch (Exception e) {
-            log.error("Scan System Failure | Error during scan: {}", e.getMessage());
-            throw new ComplianceViolationException("Critical system error during delinquency scan.");
+            // 4. Handle unexpected system failures during the scan
+            log.error("Delinquency Scan Failed | Critical error during scan: {}", e.getMessage());
+            throw new ComplianceViolationException("The system could not complete the delinquency check.");
         }
     }
 
     /**
-     * Evaluates the real-time compliance standing of a specific application through deep-policy validation.
+     * Checks if an application is currently eligible for further actions (like payments).
      * <p>
-     * This method acts as a gatekeeper for subsequent grant actions (e.g., disbursements).
-     * It delegates complex business rules to the {@link ComplianceValidator} to ensure
-     * that only applicants with an 'APPROVED' latest report are marked as eligible.
-     * </p>
-     * <p>
-     * <b>Compliance Criteria:</b>
-     * <ul>
-     * <li><b>Persistence:</b> The application must exist within the relational context.</li>
-     * <li><b>Submission Integrity:</b> At least one progress report must be present.</li>
-     * <li><b>Policy Alignment:</b> The most recent submission must carry an {@code APPROVED} status.</li>
-     * </ul>
+     * This method acts as a safety check to ensure that the applicant is following
+     * all rules. Specifically, they must have at least one submitted report, and
+     * their most recent report must be 'APPROVED'.
      * </p>
      *
-     * @param applicationId The unique {@link UUID} of the subject application.
-     * @return {@code true} if the application meets all regulatory criteria; {@code false} otherwise.
-     * @throws ApplicationNotFoundException If the target application ID cannot be resolved.
-     * @throws ComplianceViolationException If the validator encounters a structural system error.
+     * @param applicationId The unique ID of the application to check.
+     * @return true if the applicant has met all rules; false if they are missing reports or were rejected.
+     * @throws ApplicationNotFoundException If the application ID does not exist.
+     * @throws ComplianceViolationException If the system's rule engine fails to run.
      */
     @Override
     @Transactional(readOnly = true)
     public boolean isApplicantCompliant(UUID applicationId) {
-        // 1. Ingress Logging: Documenting the start of a critical decision gate
-        log.info("Compliance Validation | Initiating real-time status check for AppID: {}", applicationId);
-
+        // 1. Log the start of the compliance check
+        log.info("Compliance Check | Verifying status for Application: {}", applicationId);
         try {
-            // We no longer fetch the 'Application' object.
-            // We pass the ID directly to the validator.
+            // 2. Ask the validator to check all business rules for this ID
             boolean isCompliant = complianceValidator.verifyCompliance(applicationId);
 
             log.info("Compliance Validation Finalized | AppID: {} | Outcome: {}",
@@ -338,39 +315,32 @@ public class ComplianceServiceImpl implements ComplianceService {
             return isCompliant;
 
         } catch (Exception e) {
-            log.error("Compliance System Failure | Error for AppID: {}. Error: {}",
+            // 3. Handle errors if the rule engine breaks
+            log.error("Compliance Check | System Error for Application: {}. Details: {}",
                     applicationId, e.getMessage());
-            throw new ComplianceViolationException("The compliance engine encountered a structural failure.");
+
+            throw new ComplianceViolationException("The system could not determine compliance status at this time.");
         }
     }
 
     /**
-     * Aggregates a comprehensive compliance landscape for all applicants within a specific funding program.
+     * Generates a complete overview of all applicants' compliance status within a specific program.
      * <p>
-     * This method serves as the core data engine for the Administrative Dashboard. It performs a
-     * <b>Head-of-Queue</b> analysis by cross-referencing completed disbursements against
-     * the chronological history of progress reports.
-     * </p>
-     * <p>
-     * <b>Key Metrics Resolved:</b>
-     * <ul>
-     * <li><b>Disbursement Sync:</b> Identifies if the applicant is "Ready for Disbursement" or "Delinquent".</li>
-     * <li><b>Relational Flattening:</b> Normalizes Applicant and Program metadata into a flattened DTO.</li>
-     * <li><b>Fault Tolerance:</b> Individual record failures are captured locally to prevent global service degradation.</li>
-     * </ul>
+     * This method powers the Admin Dashboard. It compares how many payments an applicant
+     * has received against their report history to determine if they are "Up to Date"
+     * or "Behind" on their requirements.
      * </p>
      *
-     * @param programId The unique {@link UUID} of the funding program scope.
-     * @return A {@link List} of {@link ApplicantComplianceDTO} reflecting the current administrative standing.
-     * @throws ProgramNotFoundException If the program scope cannot be resolved.
-     * @throws ComplianceDataException If a structural failure occurs during the aggregation process.
+     * @param programId The ID of the funding program to summarize.
+     * @return A list of compliance summaries for every applicant in the program.
+     * @throws ComplianceDataException If the system fails to gather the summary data.
      */
     @Override
     @Transactional(readOnly = true)
-    public List<ApplicantComplianceDTO> getApplicantGrantReportingSummary(UUID programId) {
+    public List<ApplicantComplianceDTO> getGrantReportForProgram(UUID programId) {
         log.info("Administrative Audit | Initiating summary for Program: {}", programId);
 
-        // 1. Resolve Application IDs linked to this Program from our local Disbursement table
+        // 1. Find all application IDs that have financial activity in this program
         List<UUID> applicationIds = disbursementRepository.findDistinctApplicationIdsByProgramId(programId);
 
         if (applicationIds.isEmpty()) {
@@ -379,21 +349,20 @@ public class ComplianceServiceImpl implements ComplianceService {
         }
 
         try {
-            log.info("Audit Execution | Processing {} application IDs from financial records.", applicationIds.size());
+            log.info("Dashboard Update | Processing {} applications.", applicationIds.size());
 
             return applicationIds.stream().map(appId -> {
                 try {
-                    // 2. Metric Calculation using flat UUIDs
+                    // 2. Gather metrics: count payments and fetch the report history
                     long paidInstallments = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
 
-                    // Fetch reports locally
                     List<GrantReport> reports = grantReportRepository.findByApplicationIdOrderBySubmittedDateDesc(appId);
 
+                    // 3. Determine the current compliance standing
                     String complianceStatus = resolveStatus(reports, paidInstallments);
 
+                    // 4. Build the summary record for this specific application
                    // ApplicationMetadataDTO metadata = applicationClient.getApplicationMetadata(appId);
-                    // 3. Mapping: Note that Name/Program metadata must be fetched from an external service
-                    // or represented by the ID in this decoupled version.
                     return ApplicantComplianceDTO.builder()
                             .applicationId(appId)
                             .applicantName("metadata.getApplicantName()") // Placeholder for Feign/Rest call
@@ -404,7 +373,7 @@ public class ComplianceServiceImpl implements ComplianceService {
                             .build();
 
                 } catch (Exception rowError) {
-                    log.error("Audit Row Failure | App ID: {} | Error: {}", appId, rowError.getMessage());
+                    log.error("Dashboard Update | Skipping App ID {} due to error: {}", appId, rowError.getMessage());
                     return ApplicantComplianceDTO.builder()
                             .applicationId(appId)
                             .latestReportStatus("METADATA_CORRUPTION_ERROR")
@@ -413,38 +382,33 @@ public class ComplianceServiceImpl implements ComplianceService {
             }).toList();
 
         } catch (Exception globalError) {
-            log.error("Audit System Failure | Program: {} | Exception: {}", programId, globalError.getMessage());
-            throw new ComplianceDataException("Critical structural error during administrative summary generation.");
+            // 6. Handle a total system failure
+            log.error("Dashboard Update | Critical failure for Program {}: {}", programId, globalError.getMessage());
+            throw new ComplianceDataException("The system could not generate the dashboard summary.");
         }
     }
+
     /**
-     * Evaluates the synchronization between financial disbursements and reporting obligations.
+     * Calculates the current standing of an application by comparing payments to reports.
      * <p>
-     * This logic serves as a "Compliance Delta" calculator. It identifies discrepancies
-     * between the count of finalized payments and the volume of progress submissions
-     * to determine the next administrative milestone or block.
-     * </p>
-     * <p>
-     * <b>Business Rules:</b>
-     * <ul>
-     * <li><b>Cold Start:</b> If no payments and no reports exist, the project is ready to begin.</li>
-     * <li><b>Delinquency:</b> If payments outpace reports, a "Missing Report" block is triggered.</li>
-     * <li><b>Current State:</b> Otherwise, it reflects the status of the most recent submission.</li>
-     * </ul>
+     * This method acts as a "Gap Checker." It looks at how many times we've paid the applicant
+     * versus how many reports they've sent back to determine if they are eligible for more
+     * funding or if they are currently delinquent.
      * </p>
      *
-     * @param reports          A chronologically ordered list (DESC) of submitted {@link GrantReport} entities.
-     * @param paidInstallments The total count of {@code COMPLETED} disbursements for the application.
-     * @return A semantic status string representing the real-time compliance posture.
+     * @param reports          A list of all reports submitted, with the newest ones first.
+     * @param paidInstallments The total number of payments already sent to the applicant.
+     * @return A clear status message (e.g., "READY", "MISSING_REPORT", or the latest report status).
      */
     private String resolveStatus(List<GrantReport> reports, long paidInstallments) {
-        // 1. Initial State: Handling the "Day Zero" scenario
+        // 1. Check for a "Brand New" project with no activity yet
         if (reports.isEmpty() && paidInstallments == 0) {
-            log.debug("Status Resolution | Scenario: Initialized | Result: READY_FOR_FIRST_DISBURSEMENT");
+            log.debug("Status Check | Project is new. Result: READY_FOR_FIRST_DISBURSEMENT");
             return "READY_FOR_FIRST_DISBURSEMENT";
         }
 
-        // 2. Gap Analysis: Detecting missing reports relative to funding received
+        // 2. Check if the applicant is behind on their reporting
+        // If they've been paid more times than they've reported, they are delinquent.
         if (reports.size() < paidInstallments) {
             String missingStatus = "MISSING_REPORT_FOR_INSTALLMENT_" + (reports.size() + 1);
             log.warn("Compliance Gap | App requires report for next phase. Current Reports: {} | Paid Phases: {}",
@@ -452,20 +416,18 @@ public class ComplianceServiceImpl implements ComplianceService {
             return missingStatus;
         }
 
-        // 3. State Projection: Mapping the latest report status or fallback
+        // 3. Return the status of the most recent report they submitted
         return reports.stream()
                 .findFirst()
                 .map(report -> {
-                    log.debug("Status Resolution | Scenario: Active | Latest Report ID: {} | Status: {}",
-                            report.getGrantReportId(), report.getStatus());
+                    log.debug("Status Check | Active project. Latest status: {}", report.getStatus());
                     return report.getStatus().name();
                 })
                 .orElseGet(() -> {
-                    log.info("Status Resolution | Scenario: No Submissions | Result: NO_REPORTS_SUBMITTED");
+                    log.info("Status Check | No reports found in system.");
                     return "NO_REPORTS_SUBMITTED";
                 });
     }
-
 
     /**
      * Internal utility to transform a {@link ComplianceCheck} domain entity into
@@ -483,7 +445,7 @@ public class ComplianceServiceImpl implements ComplianceService {
                 .auditType(check.getType())
                 .result(check.getResult().name())
                 .notes(check.getNotes())
-                .auditDate(check.getDate().toString()) // Convert Instant to String for the DTO
+                .auditDate(check.getDate().toString())
                 .build();
     }
 }

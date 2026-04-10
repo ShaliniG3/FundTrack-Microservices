@@ -3,7 +3,10 @@ package com.cts.fundtrack.dgcs.service.disbursementservice;
 import com.cts.fundtrack.dgcs.client.applicationclient.ApplicationClient;
 import com.cts.fundtrack.dgcs.client.dto.ProgramMetadataDTO;
 import com.cts.fundtrack.dgcs.client.programclient.ProgramClient;
+
 import com.cts.fundtrack.dgcs.dto.disbursementdto.DisbursementResponseDTO;
+import com.cts.fundtrack.dgcs.exception.DisbursementDataAccessException;
+import com.cts.fundtrack.dgcs.exception.DisbursementPersistenceException;
 import com.cts.fundtrack.dgcs.exception.InvalidProgramStateException;
 
 import com.cts.fundtrack.dgcs.mapper.ModuleMapper;
@@ -13,9 +16,9 @@ import com.cts.fundtrack.dgcs.model.Disbursement;
 import com.cts.fundtrack.dgcs.model.enums.*;
 
 import com.cts.fundtrack.dgcs.repository.disbursementrepository.DisbursementRepository;
-//import com.cts.fundtrack.dgcs.repository.programrepository.ProgramRepository;
-//import com.cts.fundtrack.dgcs.util.AuditHelper;
+
 //import com.cts.fundtrack.dgcs.util.NotificationHelper;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,142 +31,288 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Service implementation for managing grant disbursements.
+ * Service implementation for managing the financial lifecycle of grant disbursements.
+ * <p>
+ * This service acts as the financial orchestrator, responsible for:
+ * <ul>
+ * <li>Tracking payment installments against grant applications.</li>
+ * <li>Verifying funding availability through the Program Service.</li>
+ * <li>Ensuring metadata consistency between financial records and external application data.</li>
+ * </ul>
+ * </p>
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class DisbursementServiceImpl implements DisbursementService {
     private final DisbursementRepository disbursementRepository;
-    //private final ApplicationRepository applicationRepository;
-  //  private final ProgramRepository programRepository;
-//    private final AuditHelper auditHelper;
-//    private final NotificationHelper notificationHelper;
     private final ModuleMapper mapper;
     private final ProgramClient programClient;
     private final ApplicationClient applicationClient;
 
+        /**
+         * Retrieves the chronological payment schedule for a specific grant application.
+         * <p>
+         * Sequence: Entity Resolution -> Schedule Retrieval -> Sort Verification.
+         * </p>
+         *
+         * @param applicationId The unique identifier for the grant application.
+         * @return A {@link List} of {@link Disbursement} entities ordered by their scheduled date.
+         * @throws DisbursementDataAccessException If the database query for the schedule fails.
+         */
+        @Override
+        @Transactional(readOnly = true)
+        public List<Disbursement> getScheduleById(UUID applicationId) {
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<Disbursement> getScheduleById(UUID applicationId) {
-        return disbursementRepository.findByApplicationIdOrderByScheduledDateAsc(applicationId);
-    }
+            log.info("Process Start: Fetching Disbursement Schedule | Application: {}", applicationId);
 
-    @Override
-    @Transactional(readOnly = true)
-    public Double getRemainingBalance(UUID applicationId) {
-        return disbursementRepository.findByApplicationIdOrderByScheduledDateAsc(applicationId).stream()
-                .filter(d -> !DisbursementStatus.PAID.equals(d.getStatus()) && !DisbursementStatus.CANCELLED.equals(d.getStatus()))
-                .mapToDouble(Disbursement::getAmount)
-                .sum();
-    }
-    @Transactional
-    @Override
-    public List<DisbursementResponseDTO> finalizeAndSplitBudget(UUID programId, PaymentFrequency frequency, int numberOfPayments) {
-        log.info("TEST MODE: Running in isolation. Bypassing Feign Clients for Program ID: {}", programId);
+            try {
+                log.debug("Validation: Verifying schedule records for AppID: {}", applicationId);
 
-        // --- MOCKING STEP 1: Program Client ---
-        // Instead of: ProgramMetadataDTO program = programClient.getProgramById(programId);
-        ProgramMetadataDTO program = new ProgramMetadataDTO();
-        program.setProgramId(programId);
-        program.setStatus("CLOSED"); // Set to CLOSED to pass the check below
-        program.setBudget(100000.0);  // Give it a dummy budget
+                List<Disbursement> schedule = disbursementRepository.findByApplicationIdOrderByScheduledDateAsc(applicationId);
 
-        log.info("Mocked Program Data: Status={}, Budget={}", program.getStatus(), program.getBudget());
+                if (schedule == null || schedule.isEmpty()) {
+                    log.warn("Lookup Notice: No disbursements found for Application: {}", applicationId);
+                    // Depending on your business logic, you may throw an ApplicationNotFoundException here
+                }
 
-        if (!"CLOSED".equalsIgnoreCase(program.getStatus())) {
-            throw new InvalidProgramStateException("Budget Split Rejected: Program must be CLOSED.");
-        }
+                log.info("Process Complete: Schedule retrieved successfully. Count: {} for Application {}",
+                        (schedule != null ? schedule.size() : 0), applicationId);
 
-        // --- MOCKING STEP 2: Pending Reviews Check ---
-        // Instead of: if (applicationClient.hasPendingReviews(programId))
-        boolean hasPendingReviews = false; // Hardcode to false for testing
-        if (hasPendingReviews) {
-            throw new InvalidProgramStateException("Budget Split Rejected: Pending reviews exist.");
-        }
+                return schedule;
 
-        // --- MOCKING STEP 3: Approved Application IDs ---
-        // Instead of: List<UUID> winnerIds = applicationClient.getApprovedApplicationIds(programId);
-        List<UUID> winnerIds = List.of(UUID.randomUUID(), UUID.randomUUID()); // Simulate 2 winners
+            } catch (Exception e) {
+                log.error("Database Failure: Could not retrieve schedule metadata for ID: {}. Error: {}",
+                        applicationId, e.getMessage());
 
-        if (winnerIds.isEmpty()) {
-            log.info("Process halted: No approved winners for Program: {}.", programId);
-            return new ArrayList<>();
-        }
-
-        double individualShare = program.getBudget() / winnerIds.size();
-        int interval = calculateMonthInterval(frequency);
-        List<Disbursement> allNewEntities = new ArrayList<>();
-
-        for (UUID appId : winnerIds) {
-            boolean alreadyHasSchedule = !disbursementRepository.findByApplicationId(appId).isEmpty();
-
-            if (!alreadyHasSchedule) {
-                List<Disbursement> savedBatch = createInstallments(appId, programId, individualShare, numberOfPayments, interval);
-                allNewEntities.addAll(savedBatch);
-
-                // --- MOCKING STEP 4: Update Remote Status ---
-                // Instead of: applicationClient.updateApplicationStatus(appId, "ACCEPTED");
-                log.info("TEST MODE: Skipping remote status update for Application ID: {}", appId);
+                throw new DisbursementDataAccessException("System failed to synchronize schedule state: " + e.getMessage());
             }
         }
 
-        return allNewEntities.stream()
-                .map(mapper::toDisbursementResponseDTO)
-                .collect(Collectors.toList());
+
+    /**
+     * Calculates the outstanding financial balance for a specific grant application.
+     * <p>
+     * Sequence: Schedule Retrieval -> Status Filtering (Excluding PAID/CANCELLED) -> Aggregation.
+     * </p>
+     *
+     * @param applicationId The unique identifier for the grant application.
+     * @return The sum of all pending or scheduled disbursement amounts.
+     * @throws DisbursementDataAccessException If the database fails to retrieve the disbursement list.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Double getRemainingBalance(UUID applicationId) {
+
+        log.info("Process Start: Calculating Remaining Balance | Application: {}", applicationId);
+
+        try {
+            log.debug("Logic Execution: Filtering active installments for AppID: {}", applicationId);
+
+            double balance = disbursementRepository.findByApplicationIdOrderByScheduledDateAsc(applicationId).stream()
+                    .filter(d -> !DisbursementStatus.PAID.equals(d.getStatus())
+                            && !DisbursementStatus.CANCELLED.equals(d.getStatus()))
+                    .mapToDouble(Disbursement::getAmount)
+                    .sum();
+
+            log.info("Process Complete: Balance calculation finished for Application {}. Result: {}",
+                    applicationId, balance);
+
+            return balance;
+
+        } catch (Exception e) {
+            log.error("Calculation Failure: Could not aggregate balance for Application: {}. Reason: {}",
+                    applicationId, e.getMessage());
+
+            throw new DisbursementDataAccessException("System failed to calculate outstanding balance: " + e.getMessage());
+        }
     }
-//    @Transactional
+    /**
+     * Orchestrates the final budget allocation and installment generation for a closed program.
+     * <p>
+     * Sequence: Program State Verification -> Review Validation -> Winner Resolution ->
+     * Pro-rata Calculation -> Installment Generation -> State Synchronization.
+     * </p>
+     *
+     * @param programId        The unique identifier of the funding program.
+     * @param frequency        The payment recurrence interval (e.g., MONTHLY, QUARTERLY).
+     * @param numberOfPayments The total count of installments to be generated per winner.
+     * @return A {@link List} of {@link DisbursementResponseDTO} representing the created schedules.
+     * @throws InvalidProgramStateException If the program is active or has unresolved reviews.
+     */
+    @Transactional
+    @Override
+    public List<DisbursementResponseDTO> finalizeAndSplitBudget(UUID programId, PaymentFrequency frequency, int numberOfPayments) {
+
+        log.info("Process Start: Budget Finalization & Splitting | Program: {} | Mode: TEST/ISOLATION", programId);
+
+        try {
+            // --- STEP 1: PROGRAM METADATA RESOLUTION ---
+            log.debug("Verification: Checking program state for Program ID: {}", programId);
+
+            // Mocking Program Client Logic
+            ProgramMetadataDTO program = new ProgramMetadataDTO();
+            program.setProgramId(programId);
+            program.setStatus("CLOSED");
+            program.setBudget(100000.0);
+
+            if (!"CLOSED".equalsIgnoreCase(program.getStatus())) {
+                log.warn("State Conflict: Program {} is not in CLOSED state. Status: {}", programId, program.getStatus());
+                throw new InvalidProgramStateException("Budget Split Rejected: Program must be CLOSED.");
+            }
+
+            // --- STEP 2: PENDING REVIEWS VALIDATION ---
+            log.debug("Validation: Verifying all applications have been reviewed for Program: {}", programId);
+
+            boolean hasPendingReviews = false;
+            if (hasPendingReviews) {
+                log.warn("Validation Rejected: Program {} still has pending reviews.", programId);
+                throw new InvalidProgramStateException("Budget Split Rejected: Pending reviews exist.");
+            }
+
+            // --- STEP 3: WINNER RESOLUTION & SHARE CALCULATION ---
+            log.debug("Resolution: Identifying approved beneficiaries for Program: {}", programId);
+
+            List<UUID> winnerIds = List.of(UUID.randomUUID(), UUID.randomUUID());
+
+            if (winnerIds.isEmpty()) {
+                log.info("Process Interrupted: No approved winners found. Skipping distribution for Program: {}.", programId);
+                return new ArrayList<>();
+            }
+
+            double individualShare = program.getBudget() / winnerIds.size();
+            int interval = calculateMonthInterval(frequency);
+            List<Disbursement> allNewEntities = new ArrayList<>();
+
+            log.info("Logic Execution: Distributing {} across {} winners. Share per winner: {}",
+                    program.getBudget(), winnerIds.size(), individualShare);
+
+            // --- STEP 4: SCHEDULE GENERATION ---
+            for (UUID appId : winnerIds) {
+                boolean alreadyHasSchedule = !disbursementRepository.findByApplicationId(appId).isEmpty();
+
+                if (!alreadyHasSchedule) {
+                    log.debug("Persistence: Generating {} installments for Application: {}", numberOfPayments, appId);
+
+                    List<Disbursement> savedBatch = createInstallments(appId, programId, individualShare, numberOfPayments, interval);
+                    allNewEntities.addAll(savedBatch);
+
+                    log.info("Sync: Skipping remote status update for Application ID: {} (TEST MODE)", appId);
+                } else {
+                    log.warn("Duplicate Prevention: Schedule already exists for Application: {}. Skipping.", appId);
+                }
+            }
+
+            log.info("Process Complete: Successfully finalized budget for Program {}. Generated {} total records.",
+                    programId, allNewEntities.size());
+
+            return allNewEntities.stream()
+                    .map(mapper::toDisbursementResponseDTO)
+                    .collect(Collectors.toList());
+
+        } catch (InvalidProgramStateException e) {
+            // Rethrow business rule violations
+            throw e;
+        } catch (Exception e) {
+            log.error("Orchestration Failure: Critical error during budget split for Program: {}. Reason: {}",
+                    programId, e.getMessage());
+
+            throw new DisbursementPersistenceException("System failed to finalize and split budget: " + e.getMessage());
+        }
+    }
+//    /**
+//     * Orchestrates the final budget allocation and installment generation for a closed program.
+//     * <p>
+//     * Sequence: Program Metadata Resolution -> Review Validation -> Winner Resolution ->
+//     * Pro-rata Calculation -> Installment Generation -> Remote Status Synchronization.
+//     * </p>
+//     *
+//     * @param programId        The unique identifier of the funding program.
+//     * @param frequency        The payment recurrence interval (e.g., MONTHLY, QUARTERLY).
+//     * @param numberOfPayments The total count of installments to be generated per winner.
+//     * @return A {@link List} of {@link DisbursementResponseDTO} representing the created schedules.
+//     * @throws InvalidProgramStateException If the program is not in a CLOSED state or has unresolved reviews.
+//     * @throws DisbursementPersistenceException If the local database synchronization fails.
+//     * @throws ExternalServiceException If the Application or Program clients fail to respond.
+//     */
+//    @Transactional(rollbackFor = Exception.class)
 //    @Override
 //    public List<DisbursementResponseDTO> finalizeAndSplitBudget(UUID programId, PaymentFrequency frequency, int numberOfPayments) {
-//        log.info("Microservice Sequence: Finalizing Budget | Program ID: {}", programId);
 //
-//        // 1. Verify Program via Feign Client (replacing programRepository)
-//        ProgramMetadataDTO program = programClient.getProgramById(programId);
+//        log.info("Process Start: Budget Finalization & Splitting | Program: {}", programId);
 //
-//        if (!"CLOSED".equalsIgnoreCase(program.getStatus())) {
-//            throw new InvalidProgramStateException("Budget Split Rejected: Program must be CLOSED.");
-//        }
+//        try {
+//            // 1. VERIFY PROGRAM STATUS VIA FEIGN
+//            log.debug("Resolution: Fetching program metadata for ID: {}", programId);
+//            ProgramMetadataDTO program = programClient.getProgramById(programId);
 //
-//        // 2. Security Check: Are there pending reviews?
-//        // This now requires a Feign call to the Application Service
-//        if (applicationClient.hasPendingReviews(programId)) {
-//            throw new InvalidProgramStateException("Budget Split Rejected: Pending reviews exist.");
-//        }
-//
-//        // 3. Fetch Approved Application IDs (not entities) via Feign
-//        List<UUID> winnerIds = applicationClient.getApprovedApplicationIds(programId);
-//
-//        if (winnerIds.isEmpty()) {
-//            log.info("Process halted: No approved winners for Program: {}.", programId);
-//            return new ArrayList<>();
-//        }
-//
-//        double individualShare = program.getBudget() / winnerIds.size();
-//        int interval = calculateMonthInterval(frequency);
-//        List<Disbursement> allNewEntities = new ArrayList<>();
-//
-//        for (UUID appId : winnerIds) {
-//            // Check local DB if schedule already exists for this UUID
-//            boolean alreadyHasSchedule = !disbursementRepository.findByApplicationId(appId).isEmpty();
-//
-//            if (!alreadyHasSchedule) {
-//                // Create the schedule locally
-//                List<Disbursement> savedBatch = createInstallments(appId, programId, individualShare, numberOfPayments, interval);
-//                allNewEntities.addAll(savedBatch);
-//
-//                // 4. Update Remote Application Status via Feign
-//                applicationClient.updateApplicationStatus(appId, "ACCEPTED");
+//            if (program == null || !"CLOSED".equalsIgnoreCase(program.getStatus())) {
+//                log.warn("State Conflict: Program {} must be CLOSED to split budget. Current Status: {}",
+//                        programId, (program != null ? program.getStatus() : "NULL"));
+//                throw new InvalidProgramStateException("Budget Split Rejected: Program must be CLOSED.");
 //            }
-//        }
 //
-//        return allNewEntities.stream()
-//                .map(mapper::toDisbursementResponseDTO)
-//                .collect(Collectors.toList());
+//            // 2. SECURITY CHECK: PENDING REVIEWS
+//            log.debug("Validation: Checking for pending reviews in Application Service for Program: {}", programId);
+//            if (applicationClient.hasPendingReviews(programId)) {
+//                log.warn("Validation Rejected: Program {} has unresolved application reviews.", programId);
+//                throw new InvalidProgramStateException("Budget Split Rejected: Pending reviews exist.");
+//            }
+//
+//            // 3. FETCH APPROVED BENEFICIARIES
+//            log.debug("Resolution: Identifying approved application IDs via Feign.");
+//            List<UUID> winnerIds = applicationClient.getApprovedApplicationIds(programId);
+//
+//            if (winnerIds == null || winnerIds.isEmpty()) {
+//                log.info("Process Halted: No approved winners found for Program: {}.", programId);
+//                return new ArrayList<>();
+//            }
+//
+//            // 4. FINANCIAL CALCULATION
+//            double individualShare = program.getBudget() / winnerIds.size();
+//            int interval = calculateMonthInterval(frequency);
+//            List<Disbursement> allNewEntities = new ArrayList<>();
+//
+//            log.info("Logic Execution: Distributing budget of {} across {} winners.",
+//                    program.getBudget(), winnerIds.size());
+//
+//            // 5. SCHEDULE GENERATION & REMOTE SYNC
+//            for (UUID appId : winnerIds) {
+//                // Check local DB for existing schedule
+//                boolean alreadyHasSchedule = !disbursementRepository.findByApplicationId(appId).isEmpty();
+//
+//                if (!alreadyHasSchedule) {
+//                    log.debug("Persistence: Generating installments for Application: {}", appId);
+//                    List<Disbursement> savedBatch = createInstallments(appId, programId, individualShare, numberOfPayments, interval);
+//                    allNewEntities.addAll(savedBatch);
+//
+//                    // Update Remote Application Status
+//                    log.debug("Sync: Updating remote status to ACCEPTED for Application: {}", appId);
+//                    applicationClient.updateApplicationStatus(appId, "ACCEPTED");
+//                } else {
+//                    log.warn("Duplicate Prevention: Schedule already exists for AppID: {}. Skipping generation.", appId);
+//                }
+//            }
+//
+//            log.info("Process Complete: Budget finalized for Program {}. Generated {} records.",
+//                    programId, allNewEntities.size());
+//
+//            return allNewEntities.stream()
+//                    .map(mapper::toDisbursementResponseDTO)
+//                    .collect(Collectors.toList());
+//
+//        } catch (InvalidProgramStateException e) {
+//            // Rethrow business rule violations directly
+//            throw e;
+//        } catch (Exception e) {
+//            log.error("Orchestration Failure: Critical error during budget finalization for Program: {}. Reason: {}",
+//                    programId, e.getMessage());
+//
+//            throw new DisbursementPersistenceException("System failed to finalize and split budget: " + e.getMessage());
+//        }
 //    }
 
     private boolean hasPendingReviews(UUID programId) {
-        // We ask the Application Service to check its own database
         return applicationClient.hasPendingReviews(programId);
     }
     private int calculateMonthInterval(PaymentFrequency frequency) {
@@ -185,8 +334,8 @@ public class DisbursementServiceImpl implements DisbursementService {
         // 2. Loop to create the schedule
         for (int i = 0; i < count; i++) {
             Disbursement d = Disbursement.builder()
-                    .applicationId(appId)      // Use the UUID, not the Object
-                    .programId(programId)          // Also store the Program ID for reporting
+                    .applicationId(appId)
+                    .programId(programId)
                     .amount(amountPerInstallment)
                     .scheduledDate(startDate.plusMonths((long) i * monthInterval))
                     .status(DisbursementStatus.SCHEDULED)

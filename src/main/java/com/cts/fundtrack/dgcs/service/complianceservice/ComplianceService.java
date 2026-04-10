@@ -1,8 +1,8 @@
 package com.cts.fundtrack.dgcs.service.complianceservice;
 
-
 import com.cts.fundtrack.dgcs.dto.compliancedto.ApplicantComplianceDTO;
 import com.cts.fundtrack.dgcs.dto.compliancedto.ComplianceCheckRequestDTO;
+import com.cts.fundtrack.dgcs.dto.compliancedto.ComplianceCheckResponseDTO;
 import com.cts.fundtrack.dgcs.dto.compliancedto.ComplianceHistoryDTO;
 import com.cts.fundtrack.dgcs.dto.grantreportdto.GrantReportResponseDTO;
 
@@ -10,87 +10,91 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Service interface defining the governance and audit workflows for grant compliance.
+ * Service interface defining the governance, audit, and regulatory oversight workflows.
  * <p>
- * This service provides the essential logic for Compliance Officers to review
- * submitted reports, maintain a permanent audit trail, and monitor the
- * health of various grant programs via specialized dashboards.
+ * This service acts as the primary engine for grant accountability. It enables
+ * Compliance Officers to perform manual report evaluations, provides real-time
+ * monitoring via administrative dashboards, and maintains an immutable audit trail
+ * to ensure fiduciary integrity across all grant programs.
  * </p>
  */
 public interface ComplianceService {
 
     /**
-     * Executes and persists a formal audit review for a submitted grant report.
+     * Executes and persists a formal audit verdict for a submitted grant report.
      * <p>
-     * This operation validates the report's current state and transitions it to
-     * a terminal status (APPROVED or FAILED) based on the officer's evaluation.
+     * This operation marks the transition of a report from a 'PENDING' state to a
+     * terminal 'APPROVED' or 'REJECTED' status. It captures the officer's remarks
+     * and a digital timestamp, effectively creating a legal record of the decision.
      * </p>
      *
-     * @param dto The {@link ComplianceCheckRequestDTO} containing the evaluation outcome and comments.
-     * @return A status message confirming the record creation and state transition.
-     * @throws// com.cts.fundtrack.exception.ProgramLifecycleException if the report is in an invalid state for auditing.
+     * @param dto The {@link ComplianceCheckRequestDTO} containing the verdict and justification.
+     * @return A {@link ComplianceCheckResponseDTO} confirming the audit result and updated report state.
      */
-    String recordAudit(ComplianceCheckRequestDTO dto);
+    ComplianceCheckResponseDTO recordAudit(ComplianceCheckRequestDTO dto);
 
     /**
-     * Aggregates real-time compliance metrics for all applications within a program.
+     * Aggregates real-time compliance metrics for a comprehensive program dashboard.
      * <p>
-     * Primarily used for dashboard visualization, this method correlates applications
-     * with their most recent reporting activity to identify potential bottlenecks.
+     * Correlates multi-service data to provide a high-level view of all applications.
+     * It highlights the current standing of each applicant, including their latest
+     * report status and upcoming reporting milestones.
      * </p>
      *
-     * @param programId The unique identifier of the grant program.
-     * @return A collection of {@link ApplicantComplianceDTO} objects for administrative review.
+     * @param programId The unique identifier of the grant program to monitor.
+     * @return A list of {@link ApplicantComplianceDTO} objects for administrative visualization.
      */
-    List<ApplicantComplianceDTO> getApplicantGrantReportingSummary(UUID programId);
+    List<ApplicantComplianceDTO> getGrantReportForProgram(UUID programId);
 
     /**
-     * Retrieves the comprehensive immutable history of all compliance audits performed.
+     * Retrieves the complete immutable history of audits performed by a specific officer.
      * <p>
-     * Facilitates regulatory reporting and internal accountability by providing
-     * a detailed log of every manual and automated compliance check.
+     * Facilitates internal quality control and regulatory transparency. By providing
+     * a filtered view of audit events, it ensures accountability and supports
+     * supervisor-level reviews of compliance decisions.
      * </p>
      *
-     * @return A list of {@link ComplianceHistoryDTO} representing the global audit trail.
+     * @param complianceOfficerId The unique UUID of the officer whose history is being retrieved.
+     * @return A list of {@link ComplianceHistoryDTO} representing the officer's decision trail.
      */
     List<ComplianceHistoryDTO> getComplianceHistoryByOfficer(UUID complianceOfficerId);
 
-//    /**
-//     * Fetches the compliance-centric details for a specific reporting resource.
-//     * <p>
-//     * Resolves the entity from the persistence layer and maps it to a UI-friendly
-//     * DTO format containing applicant and program context.
-//     * </p>
-//     *
-//     * @param reportId The unique identifier of the target report.
-//     * @return A summarized {@link ApplicantComplianceDTO} of the report's current state.
-//     * @throws RuntimeException if the resource cannot be located.
-//     */
-        GrantReportResponseDTO getGrantReportSummary(UUID reportId);
-//
-//    /**
-//     * Identifies applicants who have received payments but have not yet
-//     * submitted the required grant reports to justify those funds.
-//     * <p>
-//     * This acts as a "Delinquency Filter," identifying cases where the disbursement
-//     * count exceeds the submitted report count.
-//     * </p>
-//     * * @param programId The unique identifier of the grant program to audit.
-//     * @return A list of applicants marked with a "MISSING_REPORT" status.
-//     */
-    List<ApplicantComplianceDTO> getNonSubmittingApplicants(UUID programId);
-//
-//
     /**
-     * Verifies if the required compliance documentation has been compiled for an application.
+     * Retrieves detailed report metadata and evidence summaries for audit evaluation.
      * <p>
-     * This method is primarily utilized by Finance Officers to determine if the
-     * reporting obligations for the current disbursement cycle have been satisfied.
+     * Acts as the primary data source for the "Investigation" phase of an audit,
+     * providing officers with all the necessary context from the applicant's
+     * submission to make an informed compliance decision.
      * </p>
      *
-     * @param applicationId The unique identifier of the application to check.
-     * @return {@code true} if the compliance report is finalized; {@code false} otherwise.
+     * @param reportId The unique identifier of the target grant report.
+     * @return A {@link GrantReportResponseDTO} containing the full report context.
+     */
+    GrantReportResponseDTO getGrantReportSummary(UUID reportId);
+
+    /**
+     * Identifies applicants who are currently in breach of their reporting obligations.
+     * <p>
+     * This acts as a "Delinquency Engine," cross-referencing disbursement dates
+     * against missing submissions to flag "at-risk" applicants who have received
+     * funds but failed to justify their usage.
+     * </p>
+     *
+     * @param programId The unique identifier of the grant program to audit for missing reports.
+     * @return A list of {@link ApplicantComplianceDTO}s representing non-submitting participants.
+     */
+    List<ApplicantComplianceDTO> getNonSubmittingApplicants(UUID programId);
+
+    /**
+     * Performs a critical verification check for the automated payment engine.
+     * <p>
+     * Primarily utilized by the Finance module, this method determines if an
+     * application has satisfied all reporting requirements necessary to unlock
+     * the next scheduled fund installment.
+     * </p>
+     *
+     * @param applicationId The unique identifier of the application to verify.
+     * @return {@code true} if all compliance gates are cleared; {@code false} if payments should be halted.
      */
     boolean isApplicantCompliant(UUID applicationId);
-
 }

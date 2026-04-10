@@ -3,7 +3,6 @@ package com.cts.fundtrack.dgcs.model;
 import com.cts.fundtrack.dgcs.model.enums.GrantReportStatus;
 
 import jakarta.persistence.*;
-
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;

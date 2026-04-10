@@ -3,21 +3,25 @@ package com.cts.fundtrack.dgcs.model.enums;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Defines the specific payment channels available for grant disbursements.
- * Limited to the four primary methods used by the Finance Officer.
+ * Enumeration defining the technical mediums for fund transfer within the disbursement lifecycle.
+ * <p>
+ * This classification allows the Finance Module to categorize transactions for bank reconciliation
+ * and audit purposes. It ensures that the payout method selected by the Finance Officer aligns
+ * with the recipient's registered financial details.
+ * </p>
  */
 @Schema(description = "The financial channel or medium used to transfer grant funds to a recipient")
 public enum PaymentMethod {
 
-    @Schema(description = "Physical cash disbursement; typically used for small grants or immediate aid")
+    @Schema(description = "Physical currency disbursement; typically restricted to emergency aid or micro-grants.")
     CASH,
 
-    @Schema(description = "A physical paper check issued by the organization's bank")
+    @Schema(description = "A physical negotiable instrument issued via the organization's corporate bank account.")
     CHEQUE,
 
-    @Schema(description = "Direct electronic bank transfer (e.g., NEFT, IMPS, or RTGS)")
+    @Schema(description = "Electronic Fund Transfer (EFT) including Wire, NEFT, IMPS, or RTGS protocols.")
     BANK_TRANSFER,
 
-    @Schema(description = "Instant digital mobile payment via Unified Payments Interface")
+    @Schema(description = "Instant mobile-based digital payment via the Unified Payments Interface.")
     UPI
 }
