@@ -1,0 +1,47 @@
+server:
+  port: 8085 # Standard port for Analytics in your fleet
+
+spring:
+  application:
+    name: fundtrack-analytics-service
+  
+  # 1. Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/fundtrack_analytics_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+    username: root
+    password: root # Update this to your MySQL password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  # 2. JPA / Hibernate Settings
+  jpa:
+    hibernate:
+      ddl-auto: update # Automatically creates tables based on your @Entity classes
+    show-sql: true # Great for debugging analytics queries in the console
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  # 3. Spring Cloud Config (Since you included the Config Client)
+  config:
+    import: "optional:configserver:http://localhost:8888/" # Only pulls if Config Server is up
+
+# 4. Eureka Client Registration
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+
+# 5. Actuator for Health Checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: always

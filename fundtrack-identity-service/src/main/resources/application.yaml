@@ -1,0 +1,66 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: fundtrack-identity-service
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/fundtrack_db?createDatabaseIfNotExist=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # JPA / Hibernate settings
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        # Hibernate 7+ detects the dialect automatically from your JDBC driver.
+        format_sql: true
+
+# Eureka Client Configuration
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    # FIX: Force localhost to prevent Gateway connection timeouts (getsockopt errors)
+    ip-address: 127.0.0.1 
+    # dynamic instance-id prevents name collisions if you restart the service quickly
+    instance-id: ${spring.application.name}:${random.value}
+
+# JWT & Application Security Logic
+app:
+  jwt:
+    secret: "mysecretmysecretmysecretmysecret"
+  password_reset_url: "http://localhost:3000/reset-password?token={token}"
+
+jwt:
+  token:
+    expiration: 3600000 
+  refresh:
+    expiration: 86400000 
+
+# Management Endpoints for Health Checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, actuator
+  endpoint:
+    health:
+      show-details: always
+
+# Logging
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.hibernate.orm.jdbc.bind: TRACE
