@@ -109,4 +109,16 @@ public class NotificationController {
         service.deleteNotification(notificationId);
         return ResponseEntity.noContent().build();
     }
+    
+    @PostMapping("/send")
+    @Operation(
+            summary = "Internal Send Notification",
+            description = "Endpoint specifically for other microservices to trigger notifications via Feign Client."
+    )
+    public void receiveInternalNotification(@Valid @RequestBody NotificationRequestDTO request) {
+        log.info("Internal Request Received | User: {} | Category: {}", 
+                 request.getUserId(), request.getCategory());
+        // Directing the logic to the service layer
+        service.sendNotification(request);
+    }
 }
