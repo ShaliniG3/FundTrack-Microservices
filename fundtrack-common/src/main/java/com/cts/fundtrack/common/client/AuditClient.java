@@ -13,8 +13,9 @@ import com.cts.fundtrack.common.dto.AuditRequestDTO;
  * configuration: Ensures X-User headers are propagated automatically.
  */
 @FeignClient(
-    name = "fundtrack-identity-service", 
-    configuration = FeignConfig.class // 👈 This is the "correct" link to your interceptor
+    name = "fundtrack-identity-service",
+    configuration = FeignConfig.class,
+    fallback = AuditClientFallback.class
 )
 public interface AuditClient {
 

@@ -26,6 +26,19 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * REST controller exposing grant progress report endpoints for the FundTrack platform.
+ * <p>
+ * This controller manages the post-award reporting obligations of grant recipients.
+ * Applicants submit periodic progress reports (with PDF proof of fund utilisation) through
+ * this controller, and officers retrieve historical submissions for compliance auditing.
+ * </p>
+ * <p>
+ * Endpoints are served under {@code /api/v1/reports}. Submission is restricted to the
+ * {@code APPLICANT} role, while history retrieval is accessible to Compliance Officers,
+ * Admins, and the application's owning Applicant.
+ * </p>
+ */
 @RestController
 @RequestMapping("/api/v1/reports")
 @Slf4j
@@ -36,13 +49,30 @@ public class GrantReportController {
     private final GrantReportService grantReportService;
 
     /**
-     * Submit a report. 
-     * Restricted to APPLICANT. 
-     * Note: #dto.applicationId requires the SecurityService bean to verify ownership.
+     * Submits a new grant progress report with supporting PDF evidence.
+     * <p>
+     * Accepts a multipart request containing structured report data (scope, metrics,
+     * application ID) and a PDF file serving as proof of fund utilisation. The submission
+     * undergoes two validation steps — eligibility check and reporting-window check —
+     * before the file is stored and the report record persisted.
+     * </p>
+     * <p>
+     * Only PDF files are accepted; other content types will result in a
+     * {@code 400 Bad Request}. Restricted to the {@code APPLICANT} role.
+     * </p>
+     *
+     * @param dto   the {@link GrantReportRequestDTO} containing the application ID,
+     *              scope narrative, and quantitative metrics for this reporting period
+     * @param proof the PDF {@link MultipartFile} serving as documentary evidence of
+     *              grant fund utilisation (e.g., invoices, receipts)
+     * @return a {@link ResponseEntity} with HTTP 201 and a {@link GrantReportResponseDTO}
+     *         containing the persisted report's ID, status, and storage path
+     * @throws com.cts.fundtrack.common.exceptions.InvalidInputException if the uploaded
+     *         file is not a PDF
      */
     @Operation(summary = "Submit grant progress report")
     @PostMapping(value = "/grant_report", consumes = {"multipart/form-data"})
-    @PreAuthorize("hasRole('APPLICANT')") 
+    @PreAuthorize("hasRole('APPLICANT')")
     public ResponseEntity<GrantReportResponseDTO> submitGrantReport(
             @RequestPart("data") @Valid GrantReportRequestDTO dto,
             @RequestPart("proof") MultipartFile proof) {
@@ -61,8 +91,22 @@ public class GrantReportController {
     }
 
     /**
-     * Retrieve report history.
-     * Accessible by Officers/Admins, or the APPLICANT who owns the application.
+     * Retrieves the full report submission history for a specific grant application.
+     * <p>
+     * Returns all grant progress reports ever submitted for the given application,
+     * enabling both applicants to track their own submissions and officers to audit
+     * the reporting trail. An empty list is returned (rather than a 404) when no
+     * reports have been submitted yet.
+     * </p>
+     * <p>
+     * Access is granted to Compliance Officers and Admins unconditionally, and to
+     * the {@code APPLICANT} who owns the application (verified via
+     * {@code @securityService.isApplicationOwner}).
+     * </p>
+     *
+     * @param applicationId the UUID of the grant application whose report history is requested
+     * @return a {@link ResponseEntity} containing a list of {@link GrantReportResponseDTO}
+     *         objects; returns an empty list if no reports have been submitted
      */
     @Operation(summary = "Retrieve report history")
     @GetMapping("/grant_reports/{applicationId}")

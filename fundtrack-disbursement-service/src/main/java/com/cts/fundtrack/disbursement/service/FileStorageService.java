@@ -29,6 +29,16 @@ public class FileStorageService {
 
     private final Path storageLocation;
 
+    /**
+     * Constructs the {@code FileStorageService} and initialises the storage directory.
+     * <p>
+     * Resolves the upload path from {@link StorageConfig} to an absolute, normalised
+     * {@link Path} and creates the directory tree if it does not already exist.
+     * </p>
+     *
+     * @param config the {@link StorageConfig} providing the configured upload directory path
+     * @throws FileStorageException if the storage directory cannot be created due to an I/O error
+     */
     public FileStorageService(StorageConfig config) {
         this.storageLocation = Paths.get(config.getUploadDir()).toAbsolutePath().normalize();
 

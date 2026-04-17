@@ -16,6 +16,32 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * AOP aspect that intercepts methods annotated with {@link Auditable} in the
+ * Notification Service and forwards a corresponding audit log entry to the central
+ * Identity Service via the shared {@link AuditClient} Feign client.
+ *
+ * <p>Because the Notification Service does not own a copy of the {@code User}
+ * entity or an {@code audit_logs} table, audit records are delegated to the
+ * Identity Service over HTTP rather than persisted locally.</p>
+ *
+ * <p>Actor resolution strategy:</p>
+ * <ol>
+ *   <li>The {@code X-User-Id} header injected by the API Gateway is parsed as a
+ *       {@link UUID} and used as the actor identifier.</li>
+ *   <li>If the header is absent, blank, or contains a malformed UUID, the well-known
+ *       {@link #SYSTEM_USER_ID} sentinel ({@code 00000000-0000-0000-0000-000000000000})
+ *       is used instead to represent system-automated notification events.</li>
+ * </ol>
+ *
+ * <p>Audit failures are caught and logged as errors but never propagated to the
+ * caller, ensuring that a downstream audit service outage does not prevent
+ * notifications from being delivered.</p>
+ *
+ * @see Auditable
+ * @see AuditClient
+ * @see AuditRequestDTO
+ */
 @Aspect
 @Component
 @RequiredArgsConstructor
@@ -25,9 +51,36 @@ public class AuditAspect {
     private final AuditClient auditClient;
     private final HttpServletRequest request;
 
-    // Standard fallback for system-automated notifications
+    /**
+     * Well-known sentinel UUID used as the actor when no authenticated user
+     * can be identified — typically for system-automated notification events.
+     */
     private static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
+    /**
+     * Advice that fires after any method annotated with {@link Auditable} returns
+     * successfully and forwards an audit log entry to the Identity Service.
+     *
+     * <p>Steps performed:</p>
+     * <ol>
+     *   <li>Extract the actor UUID from the {@code X-User-Id} gateway header;
+     *       fall back to {@link #SYSTEM_USER_ID} on failure.</li>
+     *   <li>Extract the {@link com.cts.fundtrack.notification.models.Notification}
+     *       ID from the method return value if the result is a
+     *       {@link com.cts.fundtrack.notification.models.Notification} instance.</li>
+     *   <li>Build an {@link AuditRequestDTO} and dispatch it via
+     *       {@link AuditClient#sendAuditLog}.</li>
+     * </ol>
+     *
+     * <p>Any exception raised during audit processing is caught and logged;
+     * it will never propagate to the caller.</p>
+     *
+     * @param joinPoint  the join point describing the intercepted method
+     * @param auditable  the {@link Auditable} annotation instance containing
+     *                   action and entity type metadata
+     * @param result     the value returned by the intercepted method; used to
+     *                   extract the notification entity UUID
+     */
     @AfterReturning(pointcut = "@annotation(auditable)", returning = "result")
     public void logNotificationAudit(JoinPoint joinPoint, Auditable auditable, Object result) {
         try {

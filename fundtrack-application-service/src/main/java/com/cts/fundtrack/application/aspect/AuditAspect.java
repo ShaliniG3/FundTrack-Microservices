@@ -19,6 +19,20 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * AOP aspect that intercepts service methods annotated with {@link Auditable} and
+ * publishes a structured audit record to the centralised Audit Service.
+ *
+ * <p>After every successful method invocation the aspect extracts the acting user's
+ * ID from the {@code X-User-Id} request header, determines the affected entity ID
+ * from the return value, and forwards an {@link AuditRequestDTO} to the
+ * {@link AuditClient}. Any failure inside the audit pipeline is swallowed so that
+ * core business logic is never disrupted by audit-logging errors.</p>
+ *
+ * <p>If the {@code X-User-Id} header is absent (e.g., system-initiated actions),
+ * the well-known nil UUID {@code 00000000-0000-0000-0000-000000000000} is used as
+ * the actor identifier.</p>
+ */
 @Aspect
 @Component
 @RequiredArgsConstructor
@@ -31,6 +45,22 @@ public class AuditAspect {
     // Standard industry way to represent a non-user action if header is missing
     private static final UUID SYSTEM_USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
+    /**
+     * Intercepts the return of any method annotated with {@link Auditable} and
+     * sends a corresponding audit log entry to the Audit Service.
+     *
+     * <p>The method resolves the acting user from the {@code X-User-Id} HTTP
+     * header and the affected entity ID by inspecting the runtime type of
+     * {@code result}. Supported return types are {@link Application},
+     * {@link Decision}, {@link Review}, and {@link Recommendation}.</p>
+     *
+     * @param joinPoint  the join point that exposes reflective information about
+     *                   the intercepted method call
+     * @param auditable  the {@link Auditable} annotation instance carrying the
+     *                   {@code action} and {@code entityName} metadata
+     * @param result     the value returned by the intercepted method; used to
+     *                   derive the entity ID for the audit record
+     */
     @AfterReturning(pointcut = "@annotation(auditable)", returning = "result")
     public void logAuditAction(JoinPoint joinPoint, Auditable auditable, Object result) {
         try {

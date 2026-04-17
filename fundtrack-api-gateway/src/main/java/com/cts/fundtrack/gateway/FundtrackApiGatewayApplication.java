@@ -25,12 +25,16 @@ public class FundtrackApiGatewayApplication {
                 .uri("lb://FUNDTRACK-IDENTITY-SERVICE"))
             
             // 2. Program Service Route
-            .route("program-service", r -> r.path("/api/programs/**")
+            .route("program-service", r -> r.path("/api/v1/programs/**")
                 .uri("lb://FUNDTRACK-PROGRAM-SERVICE"))
+
+            .route("application-service", r -> r.path("/api/v1/applications/**", "/api/v1/reviews/**", "/api/v1/decisions/**")
+            .uri("lb://FUNDTRACK-APPLICATION-SERVICE"))
             
             // 3. Lifecycle Service Route
             .route("lifecycle-service", r -> r.path("/api/lifecycle/**")
                 .uri("lb://FUNDTRACK-LIFECYCLE-SERVICE"))
             .build();
+
     }
 }

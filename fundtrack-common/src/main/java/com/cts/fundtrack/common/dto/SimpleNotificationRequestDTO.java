@@ -6,19 +6,20 @@ import lombok.Data;
 
 
 /**
- * Data Transfer Object for sending a basic, non-templated notification.
- * Used primarily for one-off manual messages where category-based
- * templates are not required.
+ * Data Transfer Object for sending a basic, non-templated notification to a user.
+ *
+ * <p>Used primarily for one-off manual messages — for example, administrative
+ * announcements or custom alerts — where the category-based template engine
+ * in {@link com.cts.fundtrack.common.models.enums.NotificationTemplate} is not
+ * required. The message content is used verbatim as the notification body.</p>
  */
 @Data
 public class SimpleNotificationRequestDTO {
 
-    /** The unique identifier of the recipient user. */
+    /** Unique identifier of the user who will receive the notification. */
     private UUID userId;
 
-    /** The custom text message to be sent to the user. */
+    /** The custom text message to be delivered to the user as-is. */
     private String message;
-
-    // Getters and Setters with standard Javadoc...
 }
 

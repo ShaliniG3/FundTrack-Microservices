@@ -27,6 +27,20 @@ import com.cts.fundtrack.common.models.enums.GrantStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Default implementation of {@link AnalyticsService}.
+ *
+ * <p>Aggregates data from two downstream Feign clients:</p>
+ * <ul>
+ *   <li>{@link ApplicationClient} — supplies application records and program metadata
+ *       from the Application Service.</li>
+ *   <li>{@link FinanceClient} — supplies disbursement records from the Finance Service.</li>
+ * </ul>
+ *
+ * <p>All public methods are annotated with {@link com.cts.fundtrack.common.aspect.Auditable}
+ * so that every analytics read operation is recorded in the central audit log via the
+ * {@code AuditAspect}.</p>
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -122,6 +136,13 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 .build();
     }
 
+    /**
+     * Counts the number of applications whose status name matches the given string.
+     *
+     * @param apps   the list of applications to search through
+     * @param status the exact status name to match (e.g., {@code "SUBMITTED"}, {@code "APPROVED"})
+     * @return the count of applications with the specified status
+     */
     private Long countByStatus(List<ApplicationResponseDTO> apps, String status) {
         return apps.stream()
                 .filter(a -> status.equals(a.getStatus().name()))

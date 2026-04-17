@@ -28,6 +28,35 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * REST controller that exposes all notification management endpoints for the
+ * FundTrack Notification Service.
+ *
+ * <p>Supported operations:</p>
+ * <ul>
+ *   <li><b>Create Workflow Notification</b> — persists a structured, template-driven
+ *       notification linked to a specific system event (e.g., application submitted,
+ *       decision made).</li>
+ *   <li><b>Send Simple Notification</b> — dispatches a free-form ad-hoc message to
+ *       a user without requiring an application reference.</li>
+ *   <li><b>Get User Notifications</b> — retrieves the full notification history for
+ *       a user, ordered newest first.</li>
+ *   <li><b>Mark as Read</b> — transitions a notification's status from
+ *       {@code UNREAD} to {@code READ}.</li>
+ *   <li><b>Update Notification</b> — modifies the message or category of an
+ *       existing notification.</li>
+ *   <li><b>Delete Notification</b> — permanently removes a notification record.</li>
+ *   <li><b>Internal Send</b> — dedicated endpoint for service-to-service
+ *       notification delivery via Feign clients.</li>
+ * </ul>
+ *
+ * <p>All endpoints are secured by the gateway-injected identity headers resolved
+ * through {@link com.cts.fundtrack.notification.security.GatewayHeaderFilter}.
+ * Base path: {@code /api/v1/notifications}.</p>
+ *
+ * @see NotificationService
+ * @see com.cts.fundtrack.notification.service.WebNotificationServiceImplementation
+ */
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
@@ -37,6 +66,17 @@ public class NotificationController {
 
     private final NotificationService service;
 
+    /**
+     * Creates a structured workflow notification linked to a specific system event.
+     *
+     * <p>If the request body does not supply a message, a default template message
+     * is generated from the {@code category} and {@code applicationId} fields.
+     * The notification is persisted with status {@code UNREAD}.</p>
+     *
+     * @param dto the validated notification payload containing user ID, application ID,
+     *            category, and optional custom message
+     * @return {@code 201 Created} with the persisted {@link NotificationResponseDTO}
+     */
     @PostMapping
     @Operation(
             summary = "Create Workflow Notification",
@@ -51,6 +91,15 @@ public class NotificationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.sendNotification(dto));
     }
 
+    /**
+     * Sends a simple, ad-hoc free-form notification to a specific user.
+     *
+     * <p>The notification is assigned the {@code GENERAL} category and an
+     * {@code UNREAD} status. No application reference is required.</p>
+     *
+     * @param dto the payload containing the target user ID and the custom message text
+     * @return {@code 201 Created} with the persisted {@link NotificationResponseDTO}
+     */
     @PostMapping("/simple")
     @Operation(
             summary = "Send Simple Notification",
@@ -62,6 +111,12 @@ public class NotificationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.sendSimpleNotification(dto));
     }
 
+    /**
+     * Retrieves all notifications for the specified user, ordered from newest to oldest.
+     *
+     * @param userId the UUID of the user whose notification history is requested
+     * @return {@code 200 OK} with a list of {@link NotificationResponseDTO} objects
+     */
     @GetMapping("/user/{userId}")
     @Operation(
             summary = "Get User Notification History",
@@ -77,6 +132,14 @@ public class NotificationController {
         return ResponseEntity.ok(service.getNotificationsByUser(userId));
     }
 
+    /**
+     * Marks the specified notification as read by updating its status to {@code READ}.
+     *
+     * @param notificationId the UUID of the notification to mark as read
+     * @return {@code 200 OK} with the updated {@link NotificationResponseDTO}
+     * @throws com.cts.fundtrack.common.exceptions.NotificationNotFoundException if no
+     *         notification exists for the given ID
+     */
     @PatchMapping("/{notificationId}/read")
     @Operation(
             summary = "Mark Notification as Read",
@@ -87,6 +150,18 @@ public class NotificationController {
         return ResponseEntity.ok(service.markAsRead(notificationId));
     }
 
+    /**
+     * Updates the message or category of an existing notification.
+     *
+     * <p>Only non-null, non-blank fields in {@code dto} are applied to the
+     * existing record; unchanged fields retain their current values.</p>
+     *
+     * @param notificationId the UUID of the notification to update
+     * @param dto            the update payload; only supplied fields are applied
+     * @return {@code 200 OK} with the updated {@link NotificationResponseDTO}
+     * @throws com.cts.fundtrack.common.exceptions.NotificationNotFoundException if no
+     *         notification exists for the given ID
+     */
     @PutMapping("/{notificationId}")
     @Operation(
             summary = "Update Notification Content",
@@ -99,6 +174,14 @@ public class NotificationController {
         return ResponseEntity.ok(service.updateNotification(notificationId, dto));
     }
 
+    /**
+     * Permanently deletes the specified notification from the data store.
+     *
+     * @param notificationId the UUID of the notification to delete
+     * @return {@code 204 No Content} on successful deletion
+     * @throws com.cts.fundtrack.common.exceptions.NotificationNotFoundException if no
+     *         notification exists for the given ID
+     */
     @DeleteMapping("/{notificationId}")
     @Operation(
             summary = "Delete Notification",
@@ -108,5 +191,29 @@ public class NotificationController {
         log.warn("DELETE /api/v1/notifications/{} - Deleting notification", notificationId);
         service.deleteNotification(notificationId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Internal endpoint used by other microservices to trigger notifications via
+     * Feign client calls.
+     *
+     * <p>This endpoint mirrors the behaviour of {@link #create(NotificationRequestDTO)}
+     * but returns {@code void} so it can be called fire-and-forget by inter-service
+     * Feign clients. It is not intended for direct use by the API Gateway or
+     * frontend clients.</p>
+     *
+     * @param request the validated notification payload forwarded by an internal
+     *                microservice
+     */
+    @PostMapping("/send")
+    @Operation(
+            summary = "Internal Send Notification",
+            description = "Endpoint specifically for other microservices to trigger notifications via Feign Client."
+    )
+    public void receiveInternalNotification(@Valid @RequestBody NotificationRequestDTO request) {
+        log.info("Internal Request Received | User: {} | Category: {}",
+                 request.getUserId(), request.getCategory());
+        // Directing the logic to the service layer
+        service.sendNotification(request);
     }
 }

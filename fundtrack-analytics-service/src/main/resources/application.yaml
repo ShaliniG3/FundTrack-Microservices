@@ -1,5 +1,5 @@
 server:
-  port: 8085 # Standard port for Analytics in your fleet
+  port: 8090 # Analytics service port
 
 spring:
   application:
@@ -9,7 +9,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/fundtrack_analytics_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
     username: root
-    password: root # Update this to your MySQL password
+    password: Sonu@4002 # Update this to your MySQL password
     driver-class-name: com.mysql.cj.jdbc.Driver
   
   # 2. JPA / Hibernate Settings
@@ -25,6 +25,23 @@ spring:
   # 3. Spring Cloud Config (Since you included the Config Client)
   config:
     import: "optional:configserver:http://localhost:8888/" # Only pulls if Config Server is up
+
+# 4. Feign Circuit Breakers
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
+# Resilience4j Circuit Breaker Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        minimum-number-of-calls: 5
 
 # 4. Eureka Client Registration
 eureka:

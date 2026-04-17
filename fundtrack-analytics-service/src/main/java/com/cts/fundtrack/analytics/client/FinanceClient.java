@@ -16,8 +16,10 @@ import com.cts.fundtrack.common.dto.DisbursementResponseDTO;
  * This client provides access to financial data, specifically disbursements,
  * which are necessary for calculating funding analytics and spend tracking.
  */
-@FeignClient(name = "finance-service",
-configuration = FeignConfig.class
+@FeignClient(
+    name = "finance-service",
+    configuration = FeignConfig.class,
+    fallback = FinanceClientFallback.class
 )
 public interface FinanceClient {
 

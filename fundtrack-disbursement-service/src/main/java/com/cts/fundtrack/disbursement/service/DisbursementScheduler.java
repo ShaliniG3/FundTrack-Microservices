@@ -15,8 +15,19 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Background scheduler to manage the lifecycle of grant disbursements.
- * Ensures accountability by automatically updating statuses as dates arrive[cite: 6, 87].
+ * Background scheduled task that manages the automatic lifecycle transitions of
+ * grant disbursement installments.
+ * <p>
+ * This component runs a nightly cron job to identify all installments that are in
+ * {@code SCHEDULED} status and whose scheduled date has arrived or passed. It transitions
+ * those installments to {@code PENDING} status, signalling to Finance Officers that
+ * payment processing can now be initiated for those installments.
+ * </p>
+ * <p>
+ * This automated promotion prevents installments from silently remaining in
+ * {@code SCHEDULED} status past their due dates and ensures the financial dashboard
+ * always reflects an accurate picture of actionable obligations.
+ * </p>
  */
 @Slf4j
 @Service
@@ -26,9 +37,15 @@ public class DisbursementScheduler {
     private final DisbursementRepository disbursementRepo;
 
     /**
-     * Cron expression: Runs at 00:00 (midnight) every day.
-     * Logic: Finds all 'SCHEDULED' disbursements where the date is today or earlier 
-     * and flips them to 'PENDING'
+     * Nightly job that promotes due disbursement installments from {@code SCHEDULED}
+     * to {@code PENDING} status.
+     * <p>
+     * Executes at midnight (00:00) every day via the cron expression {@code 0 0 0 * * *}.
+     * Fetches all {@link com.cts.fundtrack.disbursement.models.Disbursement} records with
+     * status {@code SCHEDULED} and a {@code scheduledDate} on or before today, then
+     * bulk-updates their status to {@code PENDING} and persists the changes in a single
+     * transactional batch.
+     * </p>
      */
     @Transactional
     @Scheduled(cron = "0 0 0 * * *")

@@ -39,33 +39,58 @@ import lombok.Setter;
 @Builder
 public class Payment {
 
+    /**
+     * Unique identifier for this payment transaction record, generated as a UUID v4.
+     * Exposed to external callers only in AES-encrypted form via
+     * {@link com.cts.fundtrack.disbursement.util.EncryptionUtil}.
+     */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "payment_id", updatable = false, nullable = false)
     private UUID paymentId;
 
     /**
-     * Monolith: Disbursement disbursement
-     * Microservice: UUID disbursementId
-     * 'unique = true' kept to prevent duplicate payments for the same installment.
+     * Logical reference to the parent disbursement installment this transaction settles.
+     * The {@code unique = true} constraint enforces a one-payment-per-installment rule,
+     * preventing accidental duplicate settlements.
+     * Replaces the monolith's {@code Disbursement} entity association.
      */
     @Column(name = "disbursement_id", nullable = false, unique = true)
     private UUID disbursementId;
 
+    /**
+     * The monetary value transferred in this transaction, copied from the parent
+     * disbursement installment at the time of payment processing.
+     */
     @Column(nullable = false)
     private Double amount;
 
+    /**
+     * The UTC timestamp at which this payment transaction was recorded.
+     * Auto-populated by {@link #onCreate()} if not explicitly set.
+     */
     @Column(nullable = false)
     private Instant date;
 
+    /**
+     * The channel or mechanism used to transfer the funds
+     * (e.g., {@code BANK_TRANSFER}, {@code CHEQUE}).
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_mode", nullable = false, length = 20)
     private PaymentMethod method;
 
+    /**
+     * The outcome of this payment transaction (e.g., {@code SUCCESS}, {@code FAILED}).
+     */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
     private PaymentStatus status;
 
+    /**
+     * JPA lifecycle hook that automatically captures the transaction timestamp
+     * immediately before the record is first persisted, if not already set.
+     */
     @PrePersist
     protected void onCreate() {
         if (this.date == null) {

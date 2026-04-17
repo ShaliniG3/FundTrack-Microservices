@@ -36,6 +36,24 @@ public class ReportingWindowValidator {
     private final DisbursementRepository disbursementRepository;
     private final GrantReportRepository grantReportRepository;
 
+    /**
+     * Validates that the applicant is within an open reporting window before accepting
+     * a new grant report submission.
+     * <p>
+     * Enforces two rules:
+     * <ol>
+     *   <li>At least one disbursement installment must have been paid — applicants
+     *       cannot submit reports for money they have not yet received.</li>
+     *   <li>The total number of existing reports (in any status) must be less than
+     *       the number of paid installments — preventing duplicate or premature
+     *       submissions while a previous report is still under compliance review.</li>
+     * </ol>
+     * </p>
+     *
+     * @param applicationId the UUID of the application being submitted for reporting
+     * @throws ReportEligibilityException if no payments have been disbursed yet, or if
+     *         the applicant has already submitted reports for all paid installments
+     */
     public void validate(UUID applicationId) {
         log.debug("Assessing reporting eligibility for AppID: {}", applicationId);
 

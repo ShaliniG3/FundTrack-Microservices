@@ -24,13 +24,34 @@ import com.cts.fundtrack.application.repository.ApplicationRepository;
 import com.cts.fundtrack.application.repository.ApplicationValidationRepository;
 import com.cts.fundtrack.application.repository.DocumentRepository;
 import com.cts.fundtrack.common.aspect.Auditable;
+import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.*;
 import com.cts.fundtrack.common.exceptions.*;
 import com.cts.fundtrack.common.models.enums.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Primary implementation of {@link ApplicationService}, providing the core business
+ * logic for grant application submission, update, retrieval, validation, and deletion.
+ *
+ * <p>Key responsibilities:
+ * <ul>
+ *   <li>Enforces duplicate-application prevention per applicant/program pair.</li>
+ *   <li>Validates and persists uploaded supporting documents, enforcing an allowed
+ *       extension whitelist ({@code pdf}, {@code jpg}, {@code jpeg}, {@code png}).</li>
+ *   <li>Executes automated eligibility rule evaluation using Spring Expression Language
+ *       (SpEL) expressions fetched from the Program Service. Each rule result is stored
+ *       as an {@link com.cts.fundtrack.application.model.ApplicationValidation} record.</li>
+ *   <li>Dispatches in-system notifications via the Notification Service at key workflow
+ *       transitions (submission, update, auto-rejection, withdrawal).</li>
+ *   <li>Records auditable actions through the {@link com.cts.fundtrack.common.aspect.Auditable}
+ *       AOP annotation on mutating methods.</li>
+ * </ul>
+ * </p>
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -41,13 +62,29 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ApplicationValidationRepository validationRepo;
     private final ApplicationMapper applicationMapper;
     private final ProgramServiceClient programServiceClient;
+    private final NotificationClient notificationClient;
+    private final HttpServletRequest request;
 
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList("pdf", "jpg", "jpeg", "png");
+
+    /**
+     * Extracts the authenticated user's UUID from the {@code X-User-Id} HTTP
+     * header injected by the API Gateway.
+     *
+     * @return the current user's {@link UUID}, or {@code null} if the header
+     *         is absent (e.g., for system-initiated operations)
+     */
+    private UUID getCurrentUserId() {
+        String userIdStr = request.getHeader("X-User-Id");
+        return userIdStr != null ? UUID.fromString(userIdStr) : null;
+    }
 
     @Override
     @Transactional
     @Auditable(action = ActionType.CREATE, entityName = EntityType.APPLICATION)
     public ApplicationResponseDTO applyToProgram(UUID applicantId, ApplicationRequestDTO dto) {
+        log.info("Processing application submission for Applicant: {} to Program: {}", applicantId, dto.getProgramId());
+
         if (applicationRepo.existsByApplicantIdAndProgramId(applicantId, dto.getProgramId())) {
             throw new DuplicateApplicationException(applicantId, dto.getProgramId());
         }
@@ -61,28 +98,138 @@ public class ApplicationServiceImpl implements ApplicationService {
         Application saved = applicationRepo.saveAndFlush(application);
 
         if (dto.getDocuments() != null && !dto.getDocuments().isEmpty()) {
-            dto.getDocuments().forEach(docDto -> {
-                validateAndSaveDocument(saved, docDto);
-            });
+            dto.getDocuments().forEach(docDto -> validateAndSaveDocument(saved, docDto));
         }
+
+        // Transactional Confirmation: Sent to the person who clicked 'Apply'
+        sendInternalNotification(getCurrentUserId(), saved.getApplicationId(),
+            "Success: Your application for Program ID " + dto.getProgramId() + " has been received.", NotificationCategory.SUBMITTED);
 
         this.performValidation(saved.getApplicationId());
 
-        Application fullyPopulatedApp = applicationRepo.findById(saved.getApplicationId())
+        return applicationRepo.findById(saved.getApplicationId())
+                .map(applicationMapper::toResponseDTO)
                 .orElseThrow(() -> new ApplicationNotFoundException(saved.getApplicationId()));
-
-        return applicationMapper.toResponseDTO(fullyPopulatedApp);
     }
 
+    /**
+     * Executes the automated eligibility validation engine for the specified application.
+     *
+     * <p>Fetches the SpEL-based eligibility rules for the application's target program
+     * from the Program Service, clears any previous validation records, evaluates each
+     * rule against the application's submitted data, and persists the results as
+     * {@link com.cts.fundtrack.application.model.ApplicationValidation} records.</p>
+     *
+     * <p>If all rules pass, the application status remains {@code SUBMITTED}. If any
+     * rule fails, the status is set to {@code REJECTED} and the applicant is notified.
+     * Exceptions during validation are caught and logged without propagating, so that a
+     * Program Service outage does not break the submission flow.</p>
+     *
+     * @param applicationId the UUID of the application to validate
+     */
+    @Transactional
+    @Auditable(action = ActionType.STATUS_CHANGE, entityName = EntityType.APPLICATION)
+    public void performValidation(UUID applicationId) {
+        log.info("Executing automated validation for Application ID: {}", applicationId);
+        try {
+            Application app = fetchApplication(applicationId);
+            validationRepo.deleteByApplication_ApplicationId(applicationId);
+            app.getValidations().clear();
+
+            List<EligibilityRuleDTO> ruleDTOs = programServiceClient.getRulesByProgramId(app.getProgramId());
+
+            boolean allPassed = true;
+            for (EligibilityRuleDTO ruleDto : ruleDTOs) {
+                boolean isEligible = evaluateRule(ruleDto.getRuleExpression(), app.getApplicationData());
+
+                ApplicationValidation result = ApplicationValidation.builder()
+                        .application(app)
+                        .ruleName(ruleDto.getRuleExpression())
+                        .result(isEligible ? "PASSED" : "FAILED")
+                        .message(isEligible ? "Criteria met." : "Does not meet: " + ruleDto.getRuleExpression())
+                        .build();
+
+                app.getValidations().add(result);
+                if (!isEligible) allPassed = false;
+            }
+
+            validationRepo.saveAll(app.getValidations());
+            app.setStatus(allPassed ? ApplicationStatus.SUBMITTED : ApplicationStatus.REJECTED);
+            applicationRepo.saveAndFlush(app);
+
+            // Notify applicant if the system automatically rejects them
+            if (!allPassed) {
+                sendInternalNotification(app.getApplicantId(), app.getApplicationId(),
+                    "Update: Your application does not currently meet our automated eligibility criteria.", NotificationCategory.REJECTED);
+            }
+
+        } catch (Exception e) {
+            log.error("Automated Validation Engine Error: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = ActionType.UPDATE, entityName = EntityType.APPLICATION)
+    public ApplicationResponseDTO updateApplication(UUID applicationId, ApplicationUpdateDTO dto) {
+        log.info("Updating data for Application ID: {}", applicationId);
+        Application app = fetchApplication(applicationId);
+
+        if (app.getStatus() == ApplicationStatus.APPROVED || app.getStatus() == ApplicationStatus.REJECTED) {
+            throw new InvalidApplicationStateException("Updates are not permitted for applications in " + app.getStatus() + " state.");
+        }
+
+        if (dto.getApplicationData() != null && !dto.getApplicationData().equals(app.getApplicationData())) {
+            app.setApplicationData(dto.getApplicationData());
+            app.setStatus(ApplicationStatus.SUBMITTED);
+            app = applicationRepo.saveAndFlush(app);
+
+            sendInternalNotification(getCurrentUserId(), applicationId,
+                "Confirmation: You have successfully updated your application details.", NotificationCategory.APPLICATION);
+
+            this.performValidation(applicationId);
+        }
+
+        return applicationMapper.toResponseDTO(fetchApplication(applicationId));
+    }
+
+    @Override
+    @Transactional
+    @Auditable(action = ActionType.DELETE, entityName = EntityType.APPLICATION)
+    public void deleteApplication(UUID applicationId) {
+        log.warn("Deleting application record: {}", applicationId);
+        Application app = fetchApplication(applicationId);
+        applicationRepo.deleteById(applicationId);
+
+        sendInternalNotification(getCurrentUserId(), null,
+            "Success: Your application has been permanently removed.", NotificationCategory.GENERAL);
+    }
+
+    /**
+     * Validates a document DTO and persists it as a {@link com.cts.fundtrack.application.model.Document}
+     * entity linked to the given application.
+     *
+     * <p>Validation checks that the file URI is non-null, contains a file extension,
+     * and that the extension is in the allowed whitelist
+     * ({@code pdf}, {@code jpg}, {@code jpeg}, {@code png}).
+     * The document type is normalised to upper-case; if absent it defaults to
+     * {@code "UNKNOWN"}. Initial verification status is set to {@code SUBMITTED}.</p>
+     *
+     * @param app    the parent {@link com.cts.fundtrack.application.model.Application}
+     *               to which the document will be associated
+     * @param docDto the document data transfer object provided by the client
+     * @throws com.cts.fundtrack.common.exceptions.UnsupportedDocumentTypeException if
+     *         the file URI is missing an extension or the extension is not permitted
+     */
     private void validateAndSaveDocument(Application app, DocumentDTO docDto) {
         String fileUrl = docDto.getFileUri();
         if (fileUrl == null || !fileUrl.contains(".")) {
-             throw new UnsupportedDocumentTypeException("Invalid file URI provided.");
+             throw new UnsupportedDocumentTypeException("Invalid Document: Missing file extension.");
         }
 
         String extension = fileUrl.substring(fileUrl.lastIndexOf(".") + 1).toLowerCase();
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new UnsupportedDocumentTypeException("Extension ." + extension + " is not supported.");
+            throw new UnsupportedDocumentTypeException("Extension ." + extension + " is strictly prohibited.");
         }
 
         Document doc = Document.builder()
@@ -93,50 +240,29 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .build();
 
         documentRepo.save(doc);
-        app.getDocuments().add(doc); 
+        app.getDocuments().add(doc);
     }
 
-    @Transactional
-    @Auditable(action = ActionType.STATUS_CHANGE, entityName = EntityType.APPLICATION)
-    public void performValidation(UUID applicationId) {
-        try {
-            Application app = fetchApplication(applicationId);
-
-            validationRepo.deleteByApplication_ApplicationId(applicationId);
-
-            if (app.getValidations() == null) {
-                app.setValidations(new ArrayList<>());
-            } else {
-                app.getValidations().clear();
-            }
-
-            List<EligibilityRuleDTO> ruleDTOs = programServiceClient.getRulesByProgramId(app.getProgramId());
-
-            boolean allPassed = true;
-            for (EligibilityRuleDTO ruleDto : ruleDTOs) {
-                boolean isEligible = evaluateRule(ruleDto.getRuleExpression(), app.getApplicationData());
-
-                ApplicationValidation result = new ApplicationValidation();
-                result.setApplication(app);
-                result.setRuleName(ruleDto.getRuleExpression());
-                result.setResult(isEligible ? "PASSED" : "FAILED");
-                result.setMessage(isEligible ? "Criteria met." : "Does not meet: " + ruleDto.getRuleExpression());
-
-                app.getValidations().add(result);
-
-                if (!isEligible) allPassed = false;
-            }
-
-            validationRepo.saveAll(app.getValidations());
-            app.setStatus(allPassed ? ApplicationStatus.SUBMITTED : ApplicationStatus.REJECTED);
-
-            applicationRepo.saveAndFlush(app);
-
-        } catch (Exception e) {
-            log.error("Validation Error: {}", e.getMessage());
-        }
-    }
-
+    /**
+     * Evaluates a single SpEL eligibility rule expression against an applicant's
+     * submitted data string.
+     *
+     * <p>The {@code data} string is expected to be a comma-separated list of
+     * {@code key=value} pairs (e.g., {@code "income=30000,age=25"}). Each pair is
+     * parsed into a variable that is injected into the SpEL evaluation context.
+     * The rule expression is then normalised to lower-case and variable references
+     * are prefixed with {@code #} before being evaluated.</p>
+     *
+     * <p>Returns {@code false} — treating the rule as not met — if either argument
+     * is {@code null} or if the SpEL expression throws any exception during parsing
+     * or evaluation.</p>
+     *
+     * @param rule the SpEL expression string representing the eligibility criterion
+     *             (e.g., {@code "income >= 10000"})
+     * @param data the applicant's submitted data as a comma-separated key=value string
+     * @return {@code true} if the expression evaluates to {@code Boolean.TRUE};
+     *         {@code false} otherwise
+     */
     private boolean evaluateRule(String rule, String data) {
         if (data == null || rule == null) return false;
         try {
@@ -161,39 +287,9 @@ public class ApplicationServiceImpl implements ApplicationService {
             Expression exp = parser.parseExpression(processedRule);
             return Boolean.TRUE.equals(exp.getValue(context, Boolean.class));
         } catch (Exception e) {
-            log.error("Rule Evaluation Error: {}", e.getMessage());
+            log.error("SpEL Evaluation Error for Rule [{}]: {}", rule, e.getMessage());
             return false;
         }
-    }
-
-    @Override
-    @Transactional
-    @Auditable(action = ActionType.UPDATE, entityName = EntityType.APPLICATION)
-    public ApplicationResponseDTO updateApplication(UUID applicationId, ApplicationUpdateDTO dto) {
-        Application app = fetchApplication(applicationId);
-
-        if (app.getStatus() == ApplicationStatus.APPROVED || app.getStatus() == ApplicationStatus.REJECTED) {
-            throw new InvalidApplicationStateException(app.getStatus().name());
-        }
-
-        if (dto.getApplicationData() != null && !dto.getApplicationData().equals(app.getApplicationData())) {
-            app.setApplicationData(dto.getApplicationData());
-            app.setStatus(ApplicationStatus.SUBMITTED);
-            app = applicationRepo.saveAndFlush(app);
-            this.performValidation(applicationId);
-        }
-
-        return applicationMapper.toResponseDTO(fetchApplication(applicationId));
-    }
-
-    @Override
-    @Transactional
-    @Auditable(action = ActionType.DELETE, entityName = EntityType.APPLICATION)
-    public void deleteApplication(UUID applicationId) {
-        if (!applicationRepo.existsById(applicationId)) {
-            throw new ApplicationNotFoundException(applicationId);
-        }
-        applicationRepo.deleteById(applicationId);
     }
 
     @Override
@@ -218,8 +314,62 @@ public class ApplicationServiceImpl implements ApplicationService {
         return programServiceClient.getRequirements(fetchApplication(applicationId).getProgramId());
     }
 
+    /**
+     * Loads an {@link Application} entity by its UUID or throws a typed exception
+     * if not found, providing a single consistent lookup point throughout the service.
+     *
+     * @param id the UUID of the application to load
+     * @return the matching {@link Application} entity
+     * @throws com.cts.fundtrack.common.exceptions.ApplicationNotFoundException if no
+     *         application with the given ID exists in the repository
+     */
     private Application fetchApplication(UUID id) {
         return applicationRepo.findById(id)
                 .orElseThrow(() -> new ApplicationNotFoundException(id));
+    }
+
+    @Override
+    public List<ApplicationResponseDTO> getMyApplications(UUID applicantId) {
+        log.info("Fetching all applications for applicantId: {}", applicantId);
+        return applicationRepo.findAllByApplicantId(applicantId)
+                .stream()
+                .map(applicationMapper::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Dispatches an in-system notification to the specified user via the Notification
+     * Service Feign client.
+     *
+     * <p>The call is fire-and-forget: any exception from the Notification Service is
+     * caught and logged so that notification failures never disrupt core application
+     * business logic. If {@code userId} is {@code null} the call is skipped entirely
+     * with a warning log.</p>
+     *
+     * @param userId the UUID of the notification recipient; if {@code null} the
+     *               notification is silently skipped
+     * @param appId  the UUID of the related application to include in the notification
+     *               payload; may be {@code null} for non-application-specific messages
+     * @param msg    the human-readable notification message body
+     * @param cat    the {@link com.cts.fundtrack.common.models.enums.NotificationCategory}
+     *               classifying the event type
+     */
+    private void sendInternalNotification(UUID userId, UUID appId, String msg, NotificationCategory cat) {
+        if (userId == null) {
+            log.warn("Notification skipped: Null user context.");
+            return;
+        }
+        try {
+            NotificationRequestDTO notification = NotificationRequestDTO.builder()
+                    .userId(userId)
+                    .applicationId(appId)
+                    .message(msg)
+                    .category(cat)
+                    .build();
+            notificationClient.sendNotification(notification);
+            log.debug("Notification successfully queued for user: {}", userId);
+        } catch (Exception e) {
+            log.error("Communication Failure with Notification Service: {}", e.getMessage());
+        }
     }
 }

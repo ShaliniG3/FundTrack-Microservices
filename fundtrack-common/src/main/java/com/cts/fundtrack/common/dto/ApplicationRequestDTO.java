@@ -32,6 +32,13 @@ public class ApplicationRequestDTO {
 
 
     /**
+     * Free-text narrative the applicant provides describing their project and eligibility.
+     * This field is evaluated against SpEL eligibility rules during validation.
+     */
+    @Schema(description = "Applicant's data / project description used for eligibility evaluation")
+    private String applicationData;
+
+    /**
      * A collection of documents attached to the application for verification.
      */
     @Schema(description = "List of supporting documents uploaded with the application")

@@ -29,7 +29,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String path = request.getURI().getPath();
 
         // 1. Bypass validation for public endpoints
-        if (path.contains("/api/auth") || path.contains("/v3/api-docs")) {
+        if (path.contains("/api/v1/auth") || path.contains("/v3/api-docs")) {
             return chain.filter(exchange);
         }
 
@@ -54,7 +54,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             // 4. Mutate the request to forward headers
             ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
                     .header("X-User-Email", claims.getSubject())
-                    .header("X-User-Roles", String.valueOf(claims.get("roles")))
+                    .header("X-User-Roles", String.valueOf(claims.get("role")))
+                    .header("X-User-Id", String.valueOf(claims.get("userId")))
                     .build();
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());

@@ -14,21 +14,96 @@ import com.cts.fundtrack.common.models.enums.DisbursementStatus;
 import com.cts.fundtrack.disbursement.models.Disbursement;
 
 /**
- * Repository for managing the scheduled installments of a grant[cite: 61, 64].
+ * Spring Data JPA repository for {@link Disbursement} entities.
+ * <p>
+ * Provides data access operations for grant disbursement installment records, including
+ * schedule retrieval, status-based filtering, balance calculations, and bulk cancellation.
+ * Used by the disbursement service layer, the compliance validator, and the nightly
+ * scheduler that transitions due installments to {@code PENDING} status.
+ * </p>
  */
 @Repository
 public interface DisbursementRepository extends JpaRepository<Disbursement, UUID> {
+
+    /**
+     * Counts all disbursement installments associated with a given application,
+     * regardless of status. Used to confirm that a funding schedule exists.
+     *
+     * @param applicationId the UUID of the grant application
+     * @return the total number of disbursement records for the application
+     */
     long countByApplicationId(UUID applicationId);
+
+    /**
+     * Counts disbursement installments for an application filtered by a specific status.
+     * Used in compliance gap-analysis (e.g., counting {@code PAID} installments).
+     *
+     * @param applicationId the UUID of the grant application
+     * @param status        the {@link DisbursementStatus} to filter by
+     * @return the number of installments matching the given application and status
+     */
     long countByApplicationIdAndStatus(UUID applicationId, DisbursementStatus status);
+
+    /**
+     * Retrieves the distinct application UUIDs for all disbursements belonging to a
+     * given program. Used to build program-level compliance dashboards.
+     *
+     * @param programId the UUID of the grant program
+     * @return a list of distinct application UUIDs that have disbursements under the program
+     */
     @Query("SELECT DISTINCT d.applicationId FROM Disbursement d WHERE d.programId = ?1")
     List<UUID> findDistinctApplicationIdsByProgramId(@Param("programId") UUID programId);
+
+    /**
+     * Retrieves all disbursement installments for an application ordered chronologically
+     * by their scheduled date (ascending). Used to display payment schedules.
+     *
+     * @param applicationId the UUID of the grant application
+     * @return a chronologically ordered list of {@link Disbursement} entities
+     */
     List<Disbursement> findByApplicationIdOrderByScheduledDateAsc(UUID applicationId);
+
+    /**
+     * Retrieves all disbursement installments for a given application without ordering.
+     *
+     * @param applicationId the UUID of the grant application
+     * @return a list of all {@link Disbursement} entities for the application
+     */
     List<Disbursement> findByApplicationId(UUID applicationId);
+
+    /**
+     * Retrieves all installments with the given status whose scheduled date falls on
+     * or before the specified date. Used by the nightly scheduler to find overdue
+     * {@code SCHEDULED} installments that should be transitioned to {@code PENDING}.
+     *
+     * @param status the {@link DisbursementStatus} to filter by (typically {@code SCHEDULED})
+     * @param date   the cutoff date (typically {@code LocalDate.now()})
+     * @return a list of due {@link Disbursement} installments
+     */
     List<Disbursement> findByStatusAndScheduledDateLessThanEqual(DisbursementStatus status, LocalDate date);
+
+    /**
+     * Bulk-cancels all {@code SCHEDULED} installments for a given application.
+     * <p>
+     * Used when an application becomes non-compliant or is otherwise disqualified
+     * from receiving further disbursements. Only affects installments currently in
+     * {@code SCHEDULED} status; already-processed installments are left unchanged.
+     * </p>
+     *
+     * @param appId the UUID of the application whose scheduled installments should be cancelled
+     */
     @Modifying
     @Query("UPDATE Disbursement d SET d.status = 'CANCELLED' " +
             "WHERE d.applicationId = :appId AND d.status = 'SCHEDULED'")
     void cancelFutureInstallments(@Param("appId") UUID appId);
+    /**
+     * Retrieves all disbursement installments for a given application.
+     * Functionally equivalent to {@link #findByApplicationId(UUID)} but used
+     * specifically in the payment history lookup path.
+     *
+     * @param applicationId the UUID of the grant application
+     * @return a list of all {@link Disbursement} entities for the application
+     */
     List<Disbursement> findAllByApplicationId(UUID applicationId);
     //    /**
 //     * Finds the full payment schedule for a specific grant application[cite: 65,

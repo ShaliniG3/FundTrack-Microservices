@@ -9,7 +9,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/fundtrack_notification_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
     username: root
-    password: root # 👈 Update this to your MySQL password
+    password: Sonu@4002  # Update this to your MySQL password
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   # JPA / Hibernate Settings

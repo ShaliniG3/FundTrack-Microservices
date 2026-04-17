@@ -20,30 +20,53 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 import com.cts.fundtrack.common.exceptions.TokenExpiredException;
 
 /**
- * JwtFilter is a Spring Security filter responsible for validating incoming JWT tokens.
- * <p>
- * This filter:
- * <ul>
- * <li>Extracts the Authorization header</li>
- * <li>Parses and validates the JWT token</li>
- * <li>Retrieves user details and role from the token</li>
- * <li>Sets the authentication in the SecurityContext</li>
- * </ul>
- * It executes once per request as it extends {@link OncePerRequestFilter}.
+ * Servlet filter that validates JWT Bearer tokens on every incoming HTTP request.
+ *
+ * <p>Extends {@link OncePerRequestFilter} to guarantee exactly one execution per
+ * request, regardless of how many filter chains are active in the application.</p>
+ *
+ * <p>Filter behaviour:</p>
+ * <ol>
+ *   <li>Public paths (auth endpoints, Swagger UI, OpenAPI docs) are bypassed via
+ *       {@link #shouldNotFilter(HttpServletRequest)}.</li>
+ *   <li>For all other paths, the {@code Authorization} header is inspected for a
+ *       {@code Bearer} token.</li>
+ *   <li>If a token is present it is parsed and validated with {@link JwtUtil}. On
+ *       success, a {@link UsernamePasswordAuthenticationToken} is placed into the
+ *       {@link SecurityContextHolder} so that downstream security checks can
+ *       identify the caller.</li>
+ *   <li>If the token has expired, a {@link TokenExpiredException} is forwarded to
+ *       the global exception handler via the injected {@link HandlerExceptionResolver},
+ *       and the filter chain is halted.</li>
+ *   <li>Any other JWT parsing failure is similarly delegated to the exception
+ *       handler.</li>
+ * </ol>
+ *
+ * <p>Requests that carry no {@code Authorization} header pass through the filter
+ * unchanged and will be rejected later by Spring Security's access-control rules
+ * if the endpoint requires authentication.</p>
+ *
+ * @see JwtUtil
+ * @see com.cts.fundtrack.identity.config.SecurityConfig
  */
 @Component
 @Slf4j
-// This annotation tells Swagger that every request processed through this app
-// likely requires the 'bearerAuth' security scheme defined in your OpenApiConfig.
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final HandlerExceptionResolver resolver;
 
     /**
-     * Constructor for JwtFilter.
-     * * @param jwtUtil The utility class for JWT operations.
-     * @param resolver The resolver to bridge exceptions to the GlobalExceptionHandler.
+     * Constructs the filter with the required JWT utility and exception resolver.
+     *
+     * <p>The {@link HandlerExceptionResolver} is injected with the
+     * {@code "handlerExceptionResolver"} qualifier to target the composite resolver
+     * that delegates to {@code @ExceptionHandler} methods, bridging servlet-level
+     * filter exceptions into the MVC exception-handling pipeline.</p>
+     *
+     * @param jwtUtil  the utility component used to parse and validate JWT tokens
+     * @param resolver the exception resolver used to forward token errors to the
+     *                 global exception handler
      */
     public JwtFilter(
             JwtUtil jwtUtil,
@@ -54,13 +77,44 @@ public class JwtFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Core filter logic that intercepts every request to check for a valid Bearer token.
+     * Determines whether this filter should be skipped for the given request.
      *
-     * @param req The incoming HttpServletRequest.
-     * @param res The outgoing HttpServletResponse.
-     * @param chain The filter chain to proceed with if validation passes.
-     * @throws ServletException If a servlet error occurs.
-     * @throws IOException If an I/O error occurs.
+     * <p>Skipped for:</p>
+     * <ul>
+     *   <li>{@code /api/v1/auth/**} — public authentication endpoints.</li>
+     *   <li>{@code /v3/api-docs/**} — OpenAPI specification endpoints.</li>
+     *   <li>{@code /swagger-ui/**} — Swagger UI static resources.</li>
+     * </ul>
+     *
+     * @param request the current HTTP request
+     * @return {@code true} if the filter should be bypassed for this request
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/api/v1/auth/")
+            || path.startsWith("/v3/api-docs")
+            || path.startsWith("/swagger-ui");
+    }
+
+    /**
+     * Core filter logic that validates the JWT Bearer token and populates the
+     * {@link SecurityContextHolder} for the duration of the request.
+     *
+     * <p>If the {@code Authorization} header contains a valid {@code Bearer} token,
+     * the subject (email) and {@code role} claim are extracted and used to build a
+     * fully authenticated {@link UsernamePasswordAuthenticationToken} with the
+     * appropriate {@link SimpleGrantedAuthority}.</p>
+     *
+     * <p>Exceptions are not thrown directly; they are delegated to the
+     * {@link HandlerExceptionResolver} so that the configured
+     * {@code @ExceptionHandler} methods can produce consistent JSON error responses.</p>
+     *
+     * @param req   the incoming HTTP request
+     * @param res   the outgoing HTTP response
+     * @param chain the filter chain to continue if validation succeeds
+     * @throws ServletException if a servlet-level error occurs during filtering
+     * @throws IOException      if an I/O error occurs while processing the request
      */
     @Override
     protected void doFilterInternal(HttpServletRequest req, @NonNull HttpServletResponse res, @NonNull FilterChain chain)

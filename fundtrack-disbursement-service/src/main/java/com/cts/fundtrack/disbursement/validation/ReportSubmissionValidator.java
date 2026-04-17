@@ -36,6 +36,27 @@ public class ReportSubmissionValidator {
     private final DisbursementRepository disbursementRepository;
     private final GrantReportRepository grantReportRepository;
 
+    /**
+     * Validates general submission eligibility for a grant report against the
+     * applicant's current disbursement state.
+     * <p>
+     * Enforces two rules:
+     * <ol>
+     *   <li>At least one disbursement installment must have been paid — applicants
+     *       cannot submit reports for money they have not yet received.</li>
+     *   <li>The total number of existing reports (in any status) must be less than
+     *       the number of paid installments — preventing duplicate or premature
+     *       submissions while a previous report is still under compliance review.</li>
+     * </ol>
+     * This validator acts as the first gate in the report submission pipeline,
+     * called before {@link ReportingWindowValidator}.
+     * </p>
+     *
+     * @param applicationId the UUID of the application being validated for submission
+     * @throws ReportEligibilityException if no disbursements have been paid yet, or if
+     *         the applicant has already met their reporting obligations for all paid
+     *         installments
+     */
     public void validate(UUID applicationId) {
         log.debug("Assessing reporting eligibility for AppID: {}", applicationId);
 

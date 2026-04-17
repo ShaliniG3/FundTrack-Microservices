@@ -13,6 +13,22 @@ import com.cts.fundtrack.disbursement.repository.GrantReportRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+/**
+ * Validator component that enforces the core compliance rules for grant applications
+ * within the FundTrack disbursement platform.
+ * <p>
+ * This component is the authoritative source for determining whether an applicant is
+ * compliant and eligible to receive the next disbursement installment. It applies a
+ * multi-stage rule chain:
+ * <ol>
+ *   <li><b>Structural Check:</b> A funding schedule must exist for the application.</li>
+ *   <li><b>Gap Analysis:</b> The number of submitted reports must be at least equal
+ *       to the number of paid installments (one report per paid disbursement).</li>
+ *   <li><b>Policy Alignment:</b> The most recently submitted report must have been
+ *       formally approved by a Compliance Officer.</li>
+ * </ol>
+ * </p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -22,8 +38,24 @@ public class ComplianceValidator {
     private final GrantReportRepository grantReportRepository;
 
     /**
-     * Microservice logic: Validates compliance using raw UUIDs.
-     * Enforces the rule: Released installments (PAID) must match approved reporting.
+     * Evaluates whether a grant application satisfies all compliance obligations
+     * required before the next disbursement can be released.
+     * <p>
+     * Applies the following rule chain in order:
+     * <ol>
+     *   <li>Rejects if no disbursement schedule exists for the application.</li>
+     *   <li>Rejects if any paid installments exist but no reports have been submitted.</li>
+     *   <li>Rejects if the report count is less than the paid installment count
+     *       (gap analysis).</li>
+     *   <li>Rejects if the most recent report is not in {@code APPROVED} status.</li>
+     * </ol>
+     * A special case allows zero reports when zero installments have been paid,
+     * treating the application as compliant for the first disbursement.
+     * </p>
+     *
+     * @param applicationId the UUID of the application to evaluate
+     * @return {@code true} if the application is fully compliant and eligible for
+     *         the next disbursement; {@code false} otherwise
      */
     public boolean verifyCompliance(UUID applicationId) {
 

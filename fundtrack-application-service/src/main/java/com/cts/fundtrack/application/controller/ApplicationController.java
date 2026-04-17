@@ -26,6 +26,27 @@ import com.cts.fundtrack.common.dto.ValidationResultDTO;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * REST controller that exposes grant application lifecycle endpoints for the
+ * FundTrack Application Service.
+ *
+ * <p>Base path: {@code /api/v1/applications}</p>
+ *
+ * <p>Handles the full lifecycle of a grant application from initial submission
+ * through updates, document retrieval, validation result inspection, and
+ * withdrawal. Role-based access control is enforced at the method level via
+ * {@code @PreAuthorize} annotations, with the acting user's identity and role
+ * injected by the API Gateway through trusted HTTP headers.</p>
+ *
+ * <p>Roles used in this controller:
+ * <ul>
+ *   <li>{@code APPLICANT} — submits, updates, views and withdraws their own applications</li>
+ *   <li>{@code REVIEWER} — reads application summaries and validation results</li>
+ *   <li>{@code APPROVER} — reads summaries, documents, and validation results</li>
+ *   <li>{@code ADMIN} — has full read access across all endpoints</li>
+ * </ul>
+ * </p>
+ */
 @RestController
 @RequestMapping("/api/v1/applications")
 @RequiredArgsConstructor
@@ -34,8 +55,20 @@ public class ApplicationController {
     private final ApplicationService applicationService;
 
     /**
-     * 1. POST: Unified Application Submission
-     * Only Applicants are allowed to submit new grant requests.
+     * Submits a new grant application on behalf of the authenticated applicant.
+     *
+     * <p>The applicant's UUID is extracted from the {@code X-User-Id} header
+     * injected by the API Gateway. A duplicate-application check is performed
+     * before persisting; automated eligibility validation runs immediately
+     * after submission and may set the status to {@code REJECTED} if rules
+     * are not met.</p>
+     *
+     * @param applicantId the UUID of the authenticated applicant, sourced from
+     *                    the {@code X-User-Id} gateway header
+     * @param dto         the application payload containing the target program ID,
+     *                    freeform application data, and optional supporting documents
+     * @return a {@link ResponseEntity} with HTTP 201 and the persisted
+     *         {@link ApplicationResponseDTO} including generated ID and initial status
      */
     @PostMapping("/submit")
     @PreAuthorize("hasRole('APPLICANT')")
@@ -47,8 +80,18 @@ public class ApplicationController {
     }
 
     /**
-     * 2. PUT: Update Application
-     * Applicants can update their submission while it's in draft/submitted state.
+     * Updates an existing grant application with new data provided by the applicant.
+     *
+     * <p>Updates are only permitted while the application is in {@code SUBMITTED}
+     * or {@code UNDER_REVIEW} state. Providing new {@code applicationData} resets
+     * the status to {@code SUBMITTED} and re-triggers automated eligibility
+     * validation.</p>
+     *
+     * @param id  the UUID of the application to update
+     * @param dto the update payload containing the new application data and/or
+     *            document list
+     * @return a {@link ResponseEntity} with HTTP 200 and the updated
+     *         {@link ApplicationResponseDTO}
      */
     @PutMapping("/update/{id}")
     @PreAuthorize("hasRole('APPLICANT')")
@@ -59,18 +102,33 @@ public class ApplicationController {
     }
 
     /**
-     * 3. GET: Full Dashboard Details
-     * Accessible by the Applicant (owner) and Reviewers/Admins.
+     * Retrieves the full details of a specific grant application for dashboard display.
+     *
+     * <p>Returns a comprehensive view including application data, current status,
+     * associated documents, and validation results. Accessible by the owning
+     * applicant as well as reviewers, approvers, and administrators.</p>
+     *
+     * @param id the UUID of the application to retrieve
+     * @return a {@link ResponseEntity} with HTTP 200 and the {@link ApplicantDetailsDTO}
+     *         containing all application fields and related collections
      */
     @GetMapping("/{id}/summary")
-    @PreAuthorize("hasAnyRole('APPLICANT', 'APPROVER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('APPLICANT', 'APPROVER', 'ADMIN', 'REVIEWER')")
     public ResponseEntity<ApplicantDetailsDTO> getFullApplicationDetails(@PathVariable UUID id) {
         return ResponseEntity.ok(applicationService.getFullApplicationDetails(id));
     }
 
     /**
-     * 4. GET: Documents
-     * Restricted to Reviewers and Admins for the decision-making process.
+     * Retrieves all documents attached to a specific grant application.
+     *
+     * <p>Documents are used by approvers and administrators during the
+     * decision-making process to verify the applicant's supporting evidence.
+     * Access is restricted to the {@code APPROVER} and {@code ADMIN} roles.</p>
+     *
+     * @param id the UUID of the application whose documents are requested
+     * @return a {@link ResponseEntity} with HTTP 200 and a list of
+     *         {@link DocumentDTO} objects, each containing the document type,
+     *         file URI, and verification status
      */
     @GetMapping("/{id}/documents")
     @PreAuthorize("hasAnyRole('APPROVER', 'ADMIN')")
@@ -79,23 +137,57 @@ public class ApplicationController {
     }
 
     /**
-     * 5. GET: Validation Results
-     * Applicants view this to see why they failed; Approvers view it to confirm eligibility.
+     * Retrieves the automated eligibility validation results for a specific application.
+     *
+     * <p>Each result indicates whether the applicant's data satisfied a specific
+     * program eligibility rule evaluated using SpEL expressions. Applicants use
+     * this endpoint to understand the reason for an automated rejection; approvers
+     * use it to confirm eligibility before issuing a decision.</p>
+     *
+     * @param id the UUID of the application whose validation results are requested
+     * @return a {@link ResponseEntity} with HTTP 200 and a list of
+     *         {@link ValidationResultDTO} objects showing per-rule pass/fail outcomes
      */
     @GetMapping("/{id}/validation")
-    @PreAuthorize("hasAnyRole('APPLICANT', 'APPROVER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('APPLICANT', 'APPROVER', 'ADMIN', 'REVIEWER')")
     public ResponseEntity<List<ValidationResultDTO>> getValidationResults(@PathVariable UUID id) {
         return ResponseEntity.ok(applicationService.getValidationResults(id));
     }
 
     /**
-     * 7. DELETE: Withdraw Application
-     * Only the Applicant can withdraw their own application.
+     * Withdraws (permanently deletes) a grant application submitted by the applicant.
+     *
+     * <p>Only the {@code APPLICANT} role may withdraw applications. All associated
+     * documents and validation records are cascade-deleted. A confirmation
+     * notification is dispatched to the applicant upon successful withdrawal.</p>
+     *
+     * @param id the UUID of the application to delete
+     * @return a {@link ResponseEntity} with HTTP 204 and no body
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('APPLICANT')")
     public ResponseEntity<Void> deleteApplication(@PathVariable UUID id) {
         applicationService.deleteApplication(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Retrieves all grant applications submitted by the currently authenticated applicant.
+     *
+     * <p>The applicant's UUID is sourced from the {@code X-User-Id} header injected
+     * by the API Gateway based on the validated JWT token. This endpoint supports
+     * the "My Applications" dashboard view in the applicant-facing UI.</p>
+     *
+     * @param applicantId the UUID of the authenticated applicant, sourced from
+     *                    the {@code X-User-Id} gateway header
+     * @return a {@link ResponseEntity} with HTTP 200 and a list of
+     *         {@link ApplicationResponseDTO} objects for all applications belonging
+     *         to the specified applicant
+     */
+    @GetMapping("/my-applications")
+    @PreAuthorize("hasRole('APPLICANT')")
+    public ResponseEntity<List<ApplicationResponseDTO>> getMyApplications(
+            @RequestHeader("X-User-Id") UUID applicantId) {
+        return ResponseEntity.ok(applicationService.getMyApplications(applicantId));
     }
 }

@@ -35,12 +35,35 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * {@code AuthController} exposes authentication and authorization endpoints such as
- * register, login, logout, token refresh, and password reset flows.
+ * REST controller that exposes all public-facing authentication and session-management
+ * endpoints for the FundTrack Identity Service.
+ *
+ * <p>Covered flows:</p>
+ * <ul>
+ *   <li><b>Register</b> — create a new user account.</li>
+ *   <li><b>Login</b> — validate credentials and issue a JWT access token plus a
+ *       refresh token.</li>
+ *   <li><b>Logout</b> — invalidate the refresh token and update the user's login
+ *       status.</li>
+ *   <li><b>Token Refresh</b> — exchange a valid refresh token for a new access
+ *       JWT without re-authenticating.</li>
+ *   <li><b>Forgot Password</b> — generate and dispatch a one-time password-reset
+ *       link to the user's email.</li>
+ *   <li><b>Reset Password</b> — consume the one-time token and update the
+ *       user's password.</li>
+ * </ul>
+ *
+ * <p>All endpoints under {@code /api/v1/auth} are whitelisted in
+ * {@link com.cts.fundtrack.identity.config.SecurityConfig} and do not require a
+ * JWT Bearer token.</p>
+ *
+ * @see AuthService
+ * @see RefreshTokenService
+ * @see JwtUtil
  */
 @RequiredArgsConstructor
 @RestController
-@RequestMapping("/api/v1/auth")	
+@RequestMapping("/api/v1/auth")
 @Slf4j
 @Tag(name = "Authentication Controller", description = "Endpoints for user onboarding, session management, and password recovery")
 public class AuthController {
@@ -50,7 +73,17 @@ public class AuthController {
     private final JwtUtil jwt;
 
     /**
-     * Registers a new user account.
+     * Registers a new user account in the system.
+     *
+     * <p>Validates that neither the email address nor the phone number is already
+     * in use before persisting the new {@link User} record. The password is
+     * BCrypt-encoded before storage. On success, a summary of the created profile
+     * is returned with HTTP 201.</p>
+     *
+     * @param request the validated registration payload containing name, email,
+     *                phone number, password, and desired role
+     * @return {@code 201 Created} with a {@link RegisterResponseDTO} describing
+     *         the newly created user
      */
     @Operation(summary = "Register a new user", description = "Creates a new user account in the system and returns a summary of the created profile")
     @ApiResponses(value = {
@@ -67,7 +100,20 @@ public class AuthController {
     }
 
     /**
-     * Authenticates a user with credentials and issues tokens.
+     * Authenticates a user with their email and password and issues JWT tokens.
+     *
+     * <p>On successful authentication, two tokens are returned:</p>
+     * <ul>
+     *   <li>A short-lived <b>access token</b> (JWT) for authorising API calls.</li>
+     *   <li>A long-lived <b>refresh token</b> for obtaining new access tokens
+     *       without re-entering credentials.</li>
+     * </ul>
+     * <p>The user's {@code LoginStatus} is updated to {@code LOGGED_IN}.</p>
+     *
+     * @param request the validated login payload containing the user's email and
+     *                plaintext password
+     * @return {@code 200 OK} with a {@link LoginResponseDTO} containing both tokens
+     *         and basic profile information
      */
     @Operation(summary = "User Login", description = "Authenticates user credentials and issues Access and Refresh JWT tokens")
     @ApiResponses(value = {
@@ -84,7 +130,15 @@ public class AuthController {
     }
 
     /**
-     * Logs out the user and invalidates session-related state as applicable.
+     * Logs out the authenticated user and invalidates their refresh token.
+     *
+     * <p>All refresh tokens associated with the user are deleted from the database,
+     * and the user's {@code LoginStatus} is updated to {@code LOGGED_OUT}. The
+     * short-lived access JWT will continue to be accepted until it naturally expires;
+     * callers should discard it client-side immediately after logout.</p>
+     *
+     * @param request the validated logout payload containing the user's email
+     * @return {@code 200 OK} with a {@link LogoutResponseDTO} confirming the logout
      */
     @Operation(summary = "User Logout", description = "Invalidates the user's session and refresh token")
     @PostMapping("/logout")
@@ -96,7 +150,19 @@ public class AuthController {
     }
 
     /**
-     * Issues a new access token using a valid refresh token.
+     * Issues a new access JWT using a valid, unexpired refresh token.
+     *
+     * <p>Steps performed:</p>
+     * <ol>
+     *   <li>Locate the {@link RefreshToken} by its token string value.</li>
+     *   <li>Verify that the refresh token has not expired; delete and reject if it has.</li>
+     *   <li>Generate a fresh access JWT signed with the user's email, role, and UUID.</li>
+     *   <li>Return the new access token alongside the original (unchanged) refresh token.</li>
+     * </ol>
+     *
+     * @param request the validated payload containing the {@code refreshToken} string
+     * @return {@code 200 OK} with a {@link JwtResponseDTO} containing the new access token
+     * @throws InvalidTokenException if the refresh token is not found or has expired
      */
     @Operation(summary = "Refresh Access Token", description = "Uses a valid Refresh Token to issue a new Access JWT without re-authenticating")
     @ApiResponses(value = {
@@ -135,7 +201,16 @@ public class AuthController {
     }
 
     /**
-     * Initiates the forgot password flow (e.g., send reset link).
+     * Initiates the forgot-password flow by generating a one-time reset link.
+     *
+     * <p>A random UUID token is created, stored in memory keyed to the user's
+     * email, and embedded into a password-reset URL that is returned in the
+     * response. In a production system this URL would typically be emailed to
+     * the user rather than returned directly.</p>
+     *
+     * @param request the validated payload containing the user's registered email address
+     * @return {@code 200 OK} with a {@link ForgotPasswordResponseDTO} containing
+     *         the user's UUID and the generated reset link
      */
     @Operation(summary = "Forgot Password", description = "Sends a password reset link to the provided email address")
     @PostMapping("/forgot-password")
@@ -149,7 +224,17 @@ public class AuthController {
     }
 
     /**
-     * Resets a user's password using a valid token.
+     * Resets a user's password using a valid one-time reset token.
+     *
+     * <p>The token must have been previously generated by
+     * {@link #forgotPassword(ForgotPasswordRequestDTO)}. Once consumed successfully,
+     * the token is invalidated and cannot be reused. The new password is
+     * BCrypt-encoded before being persisted.</p>
+     *
+     * @param request the validated payload containing the one-time {@code token}
+     *                and the desired {@code newPassword}
+     * @return {@code 200 OK} with a plain-text confirmation message
+     * @throws InvalidTokenException if the provided token is not found or has already been used
      */
     @Operation(summary = "Reset Password", description = "Updates the user's password using the token received via email")
     @ApiResponses(value = {

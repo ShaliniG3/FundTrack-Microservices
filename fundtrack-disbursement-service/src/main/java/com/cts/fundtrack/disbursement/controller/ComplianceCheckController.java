@@ -26,6 +26,19 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * REST controller exposing compliance audit and governance endpoints for the FundTrack platform.
+ * <p>
+ * This controller enables Compliance Officers and Administrators to manage the full audit
+ * lifecycle of submitted grant reports. It provides endpoints for recording audit verdicts,
+ * monitoring program-level reporting health via a dashboard, retrieving historical audit
+ * trails, identifying delinquent applicants, and performing pre-disbursement compliance checks.
+ * </p>
+ * <p>
+ * All endpoints are reachable under {@code /api/v1/compliance} and are restricted to
+ * users with the {@code COMPLIANCE_OFFICER} or {@code ADMIN} role, unless otherwise noted.
+ * </p>
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/compliance")
@@ -39,7 +52,18 @@ public class ComplianceCheckController {
     private final ComplianceService complianceService;
 
     /**
-     * Records an audit decision. Restricted to Officers and Admins.
+     * Records a formal audit verdict (approval or rejection) for a submitted grant report.
+     * <p>
+     * The officer's decision is persisted as an immutable {@code ComplianceCheck} record,
+     * and the associated grant report's status is transitioned to a terminal state
+     * ({@code APPROVED} or {@code REJECTED}). Reports already in a terminal state
+     * cannot be re-audited. Restricted to Compliance Officers and Admins.
+     * </p>
+     *
+     * @param dto the {@link ComplianceCheckRequestDTO} containing the grant report ID,
+     *            the officer's UUID, the verification type, the status decision, and any comments
+     * @return a {@link ResponseEntity} with a confirmation message describing the final
+     *         report status after the audit
      */
     @PostMapping("/audit")
     @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN')")
@@ -59,7 +83,17 @@ public class ComplianceCheckController {
     }
 
     /**
-     * Retrieves compliance dashboard. Restricted to Officers and Admins.
+     * Retrieves an aggregated compliance dashboard for all applicants within a program.
+     * <p>
+     * For each approved application in the specified program, this endpoint computes
+     * the current compliance status by correlating paid disbursement installments with
+     * submitted grant reports. Useful for identifying bottlenecks at a program level.
+     * Restricted to Compliance Officers and Admins.
+     * </p>
+     *
+     * @param programId the UUID of the grant program whose compliance summary is requested
+     * @return a {@link ResponseEntity} containing a list of {@link ApplicantComplianceDTO}
+     *         objects, each representing one applicant's current reporting status
      */
     @GetMapping("/dashboard/program/{programId}")
     @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN')")
@@ -71,7 +105,16 @@ public class ComplianceCheckController {
     }
 
     /**
-     * Fetches audit history. Restricted to Officers and Admins.
+     * Retrieves the complete audit history performed by a specific compliance officer.
+     * <p>
+     * Returns all {@code ComplianceCheck} records associated with the given officer UUID,
+     * providing a traceable log of every audit decision they have made. Restricted to
+     * Compliance Officers and Admins.
+     * </p>
+     *
+     * @param complianceOfficerId the UUID of the compliance officer whose history is requested
+     * @return a {@link ResponseEntity} containing a list of {@link ComplianceHistoryDTO}
+     *         objects representing each audit record performed by that officer
      */
     @GetMapping("/history")
     @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN')")
@@ -84,19 +127,38 @@ public class ComplianceCheckController {
     }
 
     /**
-     * Identifies non-submitters. Open to Compliance, Finance, and Admins.
+     * Identifies applicants who have received disbursements but have not submitted
+     * the corresponding grant progress reports.
+     * <p>
+     * Applies a delinquency filter: any application where the count of paid disbursement
+     * installments exceeds the count of submitted reports is flagged. Accessible by
+     * Compliance Officers, Finance Officers, and Admins.
+     * </p>
+     *
+     * @param programId the UUID of the grant program to scan for non-submitters
+     * @return a {@link ResponseEntity} containing a list of {@link ApplicantComplianceDTO}
+     *         objects for applications with a {@code DELINQUENT_SUBMISSION_REQUIRED} status
      */
     @GetMapping("/non-submitters/{programId}")
     @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'FINANCE_OFFICER', 'ADMIN')")
     @Operation(summary = "Identify applicants with missing submissions")
     public ResponseEntity<List<ApplicantComplianceDTO>> getNonSubmitters(@PathVariable UUID programId) {
-        log.info("Fetching non‑submitter list for ProgramID: {}", programId);
+        log.info("Fetching non-submitter list for ProgramID: {}", programId);
         List<ApplicantComplianceDTO> list = complianceService.getNonSubmittingApplicants(programId);
         return ResponseEntity.ok(list);
     }
 
     /**
-     * Retrieves detailed report info. Restricted to Officers and Admins.
+     * Fetches the full details of a specific grant report for compliance review.
+     * <p>
+     * Resolves the grant report entity by its UUID and returns a summarized DTO
+     * containing scope, metrics, current status, and the document URL for the
+     * uploaded proof of fund utilization. Restricted to Compliance Officers and Admins.
+     * </p>
+     *
+     * @param reportId the UUID of the grant report to retrieve
+     * @return a {@link ResponseEntity} containing the {@link GrantReportResponseDTO}
+     *         with the report's details
      */
     @GetMapping("/report/{reportId}")
     @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN')")
@@ -108,7 +170,17 @@ public class ComplianceCheckController {
     }
 
     /**
-     * Verification check for Finance Officers before disbursement.
+     * Performs a real-time compliance readiness check for an application before disbursement.
+     * <p>
+     * This gate-check verifies that the applicant has fulfilled all reporting obligations
+     * for previously received installments (i.e., each paid disbursement has a corresponding
+     * approved grant report). Finance Officers use this before authorising the next payment.
+     * Accessible by Compliance Officers, Finance Officers, and Admins.
+     * </p>
+     *
+     * @param applicationId the UUID of the grant application to verify
+     * @return a {@link ResponseEntity} containing {@code true} if the applicant is compliant
+     *         and eligible for the next disbursement, or {@code false} otherwise
      */
     @GetMapping("/compliance-check/{applicationId}")
     @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'FINANCE_OFFICER', 'ADMIN')")

@@ -17,22 +17,60 @@ import com.cts.fundtrack.common.dto.DocumentDTO;
 import com.cts.fundtrack.common.dto.ValidationDTO;
 import com.cts.fundtrack.common.dto.ValidationResultDTO;
 
+/**
+ * Manual Spring-managed mapper that converts between {@link Application} JPA entities
+ * and the various DTOs used across the FundTrack Application Service API surface.
+ *
+ * <p>This class is intentionally hand-written rather than generated (e.g., by MapStruct)
+ * to allow fine-grained control over field-level mapping logic, particularly for
+ * nested collections ({@link Document}, {@link ApplicationValidation}) and timestamp
+ * conversions between {@link java.time.LocalDateTime} and {@link java.time.Instant}.</p>
+ *
+ * <p>Mapping responsibilities:
+ * <ul>
+ *   <li>{@link ApplicationRequestDTO} → {@link Application} entity (inbound submission)</li>
+ *   <li>{@link Application} → {@link ApplicationResponseDTO} (standard API response)</li>
+ *   <li>{@link Application} → {@link ApplicantDetailsDTO} (full dashboard view)</li>
+ *   <li>{@link Document} → {@link DocumentDTO} (document list response)</li>
+ *   <li>{@link ApplicationValidation} → {@link ValidationResultDTO} (validation detail response)</li>
+ * </ul>
+ * </p>
+ */
 @Component
 public class ApplicationMapper {
 
     /**
-     * Maps Request DTO to Entity.
+     * Converts an inbound {@link ApplicationRequestDTO} to a new {@link Application} entity.
+     *
+     * <p>Only {@code programId} and {@code applicationData} are copied from the DTO;
+     * the {@code applicantId} is intentionally left unset and must be assigned in the
+     * service layer from the authenticated request context.</p>
+     *
+     * @param dto the request DTO received from the client; may be {@code null}
+     * @return a partially populated {@link Application} entity, or {@code null} if
+     *         {@code dto} is {@code null}
      */
     public Application toEntity(ApplicationRequestDTO dto) {
         if (dto == null) return null;
         Application entity = new Application();
         entity.setProgramId(dto.getProgramId());
+        entity.setApplicationData(dto.getApplicationData());
         // applicantId is set in the Service layer
         return entity;
     }
 
     /**
-     * Maps Entity to the Standard Response DTO (used for /submit).
+     * Converts an {@link Application} entity to the standard {@link ApplicationResponseDTO}
+     * used as the API response for submission and update operations.
+     *
+     * <p>The {@code submittedDate} is derived from {@code createdAt} and converted from
+     * {@link java.time.LocalDateTime} to {@link java.time.Instant} using UTC offset.
+     * Associated documents and validation records are mapped to their respective DTO
+     * representations via private helper methods.</p>
+     *
+     * @param entity the {@link Application} entity to convert; may be {@code null}
+     * @return a fully populated {@link ApplicationResponseDTO}, or {@code null} if
+     *         {@code entity} is {@code null}
      */
     public ApplicationResponseDTO toResponseDTO(Application entity) {
         if (entity == null) return null;
@@ -51,8 +89,18 @@ public class ApplicationMapper {
     }
 
     /**
-     * Maps Entity to Full Details DTO (used for /summary).
-     * This fixes the "toFullDetailsDTO is undefined" error.
+     * Converts an {@link Application} entity to the {@link ApplicantDetailsDTO} used
+     * by the full application summary endpoint ({@code GET /applications/{id}/summary}).
+     *
+     * <p>Unlike {@link #toResponseDTO(Application)}, this mapping includes the raw
+     * {@code applicationData} string and the {@code createdAt} timestamp as a
+     * {@link java.time.LocalDateTime}, providing a richer view suitable for dashboard
+     * display. Nested documents and validation results are each mapped to their own
+     * DTO lists.</p>
+     *
+     * @param entity the {@link Application} entity to convert; may be {@code null}
+     * @return a fully populated {@link ApplicantDetailsDTO}, or {@code null} if
+     *         {@code entity} is {@code null}
      */
     public ApplicantDetailsDTO toFullDetailsDTO(Application entity) {
         if (entity == null) return null;
@@ -80,8 +128,15 @@ public class ApplicationMapper {
     }
 
     /**
-     * Maps a single Document entity to DTO.
-     * Required for stream mapping in the Service.
+     * Converts a single {@link Document} entity to a {@link DocumentDTO}.
+     *
+     * <p>This method is also called directly from the service layer when
+     * stream-mapping document collections, making it {@code public} rather
+     * than private.</p>
+     *
+     * @param entity the {@link Document} entity to convert; may be {@code null}
+     * @return a {@link DocumentDTO} containing the document ID, type, file URI,
+     *         and verification status, or {@code null} if {@code entity} is {@code null}
      */
     public DocumentDTO toDocumentDTO(Document entity) {
         if (entity == null) return null;
@@ -94,14 +149,23 @@ public class ApplicationMapper {
     }
 
     /**
-     * Maps a single ApplicationValidation entity to ValidationResultDTO.
-     * This fixes the "toValidationDTO is undefined" error.
+     * Converts a single {@link ApplicationValidation} entity to a {@link ValidationResultDTO}.
+     *
+     * <p>The {@code passed} boolean field is derived by case-insensitively comparing
+     * the stored {@code result} string to {@code "PASSED"}.</p>
+     *
+     * @param validation the {@link ApplicationValidation} entity to convert;
+     *                   may be {@code null}
+     * @return a {@link ValidationResultDTO} with rule name, raw result string,
+     *         derived pass/fail flag, message, and validation timestamp, or
+     *         {@code null} if {@code validation} is {@code null}
      */
     public ValidationResultDTO toValidationDTO(ApplicationValidation validation) {
         if (validation == null) return null;
         ValidationResultDTO dto = new ValidationResultDTO();
         dto.setRuleName(validation.getRuleName());
         dto.setResult(validation.getResult());
+        dto.setPassed("PASSED".equalsIgnoreCase(validation.getResult()));
         dto.setMessage(validation.getMessage());
         dto.setValidatedAt(validation.getValidatedAt());
         return dto;
