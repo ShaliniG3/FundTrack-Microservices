@@ -87,7 +87,13 @@ public class ProgramServiceImpl implements ProgramService {
      */
     private UUID getCurrentUserId() {
         String userIdStr = request.getHeader("X-User-Id");
-        return userIdStr != null ? UUID.fromString(userIdStr) : null;
+        if (userIdStr == null || userIdStr.isBlank()) return null;
+        try {
+            return UUID.fromString(userIdStr);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid UUID value in X-User-Id header: '{}'", userIdStr);
+            return null;
+        }
     }
 
     /**
@@ -101,8 +107,8 @@ public class ProgramServiceImpl implements ProgramService {
     @Transactional
     @Auditable(action = ActionType.CREATE, entityName = EntityType.PROGRAM)
     public ProgramResponseDTO createProgram(ProgramRequestDTO dto) {
-        log.info("Initiating creation of new program: {}", dto.getName());
         if (dto == null) throw new InvalidProgramStateException("Program data cannot be null.");
+        log.info("Initiating creation of new program: {}", dto.getName());
         validateDates(dto);
 
         Program program = programMapper.toEntity(dto);
@@ -185,7 +191,13 @@ public class ProgramServiceImpl implements ProgramService {
         if (dto.getStartDate() != null) existingProgram.setStartDate(dto.getStartDate());
         if (dto.getEndDate() != null) existingProgram.setEndDate(dto.getEndDate());
 
-        validateDates(dto);
+        // Validate using the entity's merged dates, not the raw DTO fields.
+        // A partial update (e.g. only endDate supplied) would bypass validateDates(dto)
+        // because dto.getStartDate() would be null, skipping the comparison entirely.
+        if (existingProgram.getStartDate() != null && existingProgram.getEndDate() != null
+                && existingProgram.getEndDate().isBefore(existingProgram.getStartDate())) {
+            throw new InvalidProgramStateException("Date Validation Error: End date cannot occur before start date.");
+        }
         Program saved = programRepository.save(existingProgram);
 
         sendInternalNotification(programId, "Success: Program '" + saved.getName() + "' has been updated.", NotificationCategory.GENERAL);
@@ -226,7 +238,16 @@ public class ProgramServiceImpl implements ProgramService {
         log.warn("PERMANENT DELETE triggered for program ID: {}", programId);
         Program program = programRepository.findById(programId)
                 .orElseThrow(() -> new ProgramNotFoundException("Cannot delete. Program not found."));
-        programRepository.deleteById(programId);
+
+        // Explicitly initialise and clear both lazy child collections.
+        // With orphanRemoval = true, clearing the collection marks every child as an
+        // orphan.  saveAndFlush then flushes the resulting DELETE statements to the DB
+        // *before* the parent row is removed, satisfying the MySQL FK constraint.
+        program.getEligibilityRules().clear();
+        program.getRequiredDocuments().clear();
+        programRepository.saveAndFlush(program);
+
+        programRepository.delete(program);
 
         sendInternalNotification(null, "Security Confirmation: Program '" + program.getName() + "' was permanently deleted.", NotificationCategory.GENERAL);
     }
@@ -370,7 +391,7 @@ public class ProgramServiceImpl implements ProgramService {
                     .build();
             notificationClient.sendNotification(notification);
             log.debug("Transactional confirmation sent to user: {}", currentLoggedInUser);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Feign Error: Unable to reach Notification Service for user {}. Error: {}", currentLoggedInUser, e.getMessage());
         }
     }

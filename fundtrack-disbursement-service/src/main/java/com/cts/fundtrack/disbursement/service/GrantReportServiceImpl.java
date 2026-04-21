@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cts.fundtrack.common.aspect.Auditable;
+import com.cts.fundtrack.common.client.IdentityClient;
 import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.GrantReportRequestDTO;
 import com.cts.fundtrack.common.dto.GrantReportResponseDTO;
@@ -55,6 +56,7 @@ public class GrantReportServiceImpl implements GrantReportService {
     private final ReportingWindowValidator windowValidator;
     private final FileStorageService fileStorageService;
     private final NotificationClient notificationClient;
+    private final IdentityClient identityClient;
     private final HttpServletRequest request;
 
     /**
@@ -104,6 +106,11 @@ public class GrantReportServiceImpl implements GrantReportService {
             // Notification: Transactional Confirmation to the currently logged-in user
             sendInternalNotification(getCurrentUserId(), dto.getApplicationId(),
                 "Submission Success: Your progress report for Application " + dto.getApplicationId() + " has been received and is awaiting audit.",
+                NotificationCategory.COMPLIANCE);
+
+            // Broadcast to all Compliance Officers: a new report is pending audit
+            notifyRole("COMPLIANCE_OFFICER", dto.getApplicationId(),
+                "A new grant progress report has been submitted for Application " + dto.getApplicationId() + " and requires compliance review.",
                 NotificationCategory.COMPLIANCE);
 
             return this.convertToResponse(savedReport);
@@ -179,6 +186,15 @@ public class GrantReportServiceImpl implements GrantReportService {
      * @param message  the human-readable notification message body
      * @param category the {@link NotificationCategory} used to classify the alert in the UI
      */
+    private void notifyRole(String role, UUID appId, String message, NotificationCategory category) {
+        try {
+            identityClient.getUserIdsByRole(role).forEach(uid ->
+                sendInternalNotification(uid, appId, message, category));
+        } catch (Exception e) {
+            log.error("Role-broadcast notification failed for role {}: {}", role, e.getMessage());
+        }
+    }
+
     private void sendInternalNotification(UUID userId, UUID appId, String message, NotificationCategory category) {
         if (userId == null) {
             log.warn("Notification Aborted: Authenticated user context not available.");

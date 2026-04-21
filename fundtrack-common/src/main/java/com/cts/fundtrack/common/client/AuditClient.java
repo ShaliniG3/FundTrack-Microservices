@@ -14,6 +14,7 @@ import com.cts.fundtrack.common.dto.AuditRequestDTO;
  */
 @FeignClient(
     name = "fundtrack-identity-service",
+    contextId = "auditClient",
     configuration = FeignConfig.class,
     fallback = AuditClientFallback.class
 )

@@ -16,6 +16,7 @@ import com.cts.fundtrack.application.repository.ApplicationRepository;
 import com.cts.fundtrack.application.repository.RecommendationRepository;
 import com.cts.fundtrack.application.repository.ReviewRepository;
 import com.cts.fundtrack.common.aspect.Auditable;
+import com.cts.fundtrack.common.client.IdentityClient;
 import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.ApplicationResponseDTO;
 import com.cts.fundtrack.common.dto.NotificationRequestDTO;
@@ -66,6 +67,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ApplicationRepository applicationRepository;
     private final ApplicationMapper applicationMapper;
     private final NotificationClient notificationClient;
+    private final IdentityClient identityClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -117,9 +119,14 @@ public class ReviewServiceImpl implements ReviewService {
         app.setStatus(ApplicationStatus.UNDER_REVIEW);
         applicationRepository.save(app);
 
-        // Notification: Status updated to Under Review
+        // Notification: Status updated to Under Review → notify applicant
         sendInternalNotification(app.getApplicantId(), app.getApplicationId(),
             "Great news! Your application is now officially Under Review by our technical committee.",
+            NotificationCategory.UNDER_REVIEW);
+
+        // Broadcast to all Approvers: a new application is ready for final decision
+        notifyRole("APPROVER", app.getApplicationId(),
+            "Application " + app.getApplicationId() + " has completed its review and is ready for your approval decision.",
             NotificationCategory.UNDER_REVIEW);
     }
 
@@ -260,6 +267,15 @@ public class ReviewServiceImpl implements ReviewService {
      * @param category the {@link com.cts.fundtrack.common.models.enums.NotificationCategory}
      *                 classifying the event type
      */
+    private void notifyRole(String role, UUID appId, String message, NotificationCategory category) {
+        try {
+            identityClient.getUserIdsByRole(role).forEach(uid ->
+                sendInternalNotification(uid, appId, message, category));
+        } catch (Exception e) {
+            log.error("Role-broadcast notification failed for role {}: {}", role, e.getMessage());
+        }
+    }
+
     private void sendInternalNotification(UUID userId, UUID appId, String message, NotificationCategory category) {
         try {
             NotificationRequestDTO notification = NotificationRequestDTO.builder()
@@ -269,7 +285,7 @@ public class ReviewServiceImpl implements ReviewService {
                     .category(category)
                     .build();
             notificationClient.sendNotification(notification);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Failed to dispatch internal notification for User {}: {}", userId, e.getMessage());
         }
     }

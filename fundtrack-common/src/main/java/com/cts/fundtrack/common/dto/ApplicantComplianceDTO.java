@@ -45,4 +45,8 @@ public class ApplicantComplianceDTO {
     @Schema(description = "Current installment or milestone number",
             example = "2")
     private Integer currentInstallment;
+
+    @Schema(description = "UUID of the latest submitted grant report, null if no report submitted yet",
+            example = "f1a2b3c4-d5e6-7890-abcd-ef1234567890")
+    private UUID reportId;
 }

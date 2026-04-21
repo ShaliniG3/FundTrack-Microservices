@@ -22,6 +22,7 @@ import com.cts.fundtrack.application.repository.ApplicationRepository;
 import com.cts.fundtrack.application.repository.ApplicationValidationRepository;
 import com.cts.fundtrack.application.repository.DocumentRepository;
 import com.cts.fundtrack.common.aspect.Auditable;
+import com.cts.fundtrack.common.client.IdentityClient;
 import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.*;
 import com.cts.fundtrack.common.exceptions.*;
@@ -61,6 +62,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ApplicationMapper applicationMapper;
     private final ProgramServiceClient programServiceClient;
     private final NotificationClient notificationClient;
+    private final IdentityClient identityClient;
     private final HttpServletRequest request;
 
     // Self-injection via @Lazy to call @Transactional/@Auditable methods through
@@ -80,7 +82,13 @@ public class ApplicationServiceImpl implements ApplicationService {
      */
     private UUID getCurrentUserId() {
         String userIdStr = request.getHeader("X-User-Id");
-        return userIdStr != null ? UUID.fromString(userIdStr) : null;
+        if (userIdStr == null || userIdStr.isBlank()) return null;
+        try {
+            return UUID.fromString(userIdStr);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid UUID value in X-User-Id header: '{}'", userIdStr);
+            return null;
+        }
     }
 
     @Override
@@ -108,6 +116,11 @@ public class ApplicationServiceImpl implements ApplicationService {
         // Transactional Confirmation: Sent to the person who clicked 'Apply'
         sendInternalNotification(getCurrentUserId(), saved.getApplicationId(),
             "Success: Your application for Program ID " + dto.getProgramId() + " has been received.", NotificationCategory.SUBMITTED);
+
+        // Broadcast to all Reviewers: a new application is pending their evaluation
+        notifyRole("REVIEWER", saved.getApplicationId(),
+            "New application submitted and awaiting your review. Application ID: " + saved.getApplicationId(),
+            NotificationCategory.SUBMITTED);
 
         self.performValidation(saved.getApplicationId());
 
@@ -467,6 +480,21 @@ public class ApplicationServiceImpl implements ApplicationService {
         return response;
     }
 
+    /**
+     * Broadcasts a notification to every user that holds the given role by
+     * querying the Identity Service for their user IDs, then sending an individual
+     * notification to each recipient. Failures are caught and logged so they never
+     * block the primary business operation.
+     */
+    private void notifyRole(String role, UUID appId, String msg, NotificationCategory cat) {
+        try {
+            identityClient.getUserIdsByRole(role).forEach(uid ->
+                sendInternalNotification(uid, appId, msg, cat));
+        } catch (Exception e) {
+            log.error("Role-broadcast notification failed for role {}: {}", role, e.getMessage());
+        }
+    }
+
     private void sendInternalNotification(UUID userId, UUID appId, String msg, NotificationCategory cat) {
         if (userId == null) {
             log.warn("Notification skipped: Null user context.");
@@ -481,7 +509,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                     .build();
             notificationClient.sendNotification(notification);
             log.debug("Notification successfully queued for user: {}", userId);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Communication Failure with Notification Service: {}", e.getMessage());
         }
     }

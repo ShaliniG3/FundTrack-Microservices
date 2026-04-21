@@ -62,7 +62,7 @@ public class DisbursementController {
      *         objects representing each scheduled installment, or an empty list if none exist
      */
     @GetMapping("/application/{applicationId}")
-    @PreAuthorize("hasRole('FINANCE_OFFICER')")
+    @PreAuthorize("hasAnyRole('FINANCE_OFFICER', 'APPLICANT')")
     @Operation(
             summary = "Fetch Payment Schedule",
             description = "Retrieves all scheduled installments for a specific application.",

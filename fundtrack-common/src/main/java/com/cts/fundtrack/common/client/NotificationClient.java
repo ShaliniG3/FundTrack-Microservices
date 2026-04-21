@@ -33,6 +33,6 @@ public interface NotificationClient {
      * @param request the {@link NotificationRequestDTO} containing the recipient,
      *                message content, and notification category
      */
-    @PostMapping("/api/v1/internal/notifications/send")
+    @PostMapping("/api/v1/notifications/send")
     void sendNotification(@RequestBody NotificationRequestDTO request);
 }

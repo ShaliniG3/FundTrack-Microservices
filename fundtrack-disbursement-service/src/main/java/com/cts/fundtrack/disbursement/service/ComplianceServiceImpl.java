@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.cts.fundtrack.common.aspect.Auditable;
 import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.*;
+import com.cts.fundtrack.disbursement.client.ApplicationClient;
 import com.cts.fundtrack.common.exceptions.*;
 import com.cts.fundtrack.common.models.enums.*;
 import com.cts.fundtrack.disbursement.models.ComplianceCheck;
@@ -48,6 +49,7 @@ public class ComplianceServiceImpl implements ComplianceService {
     private final DisbursementRepository disbursementRepository;
     private final ComplianceValidator complianceValidator;
     private final NotificationClient notificationClient;
+    private final ApplicationClient applicationClient;
     private final HttpServletRequest request;
 
     /**
@@ -183,17 +185,40 @@ public class ComplianceServiceImpl implements ComplianceService {
         log.debug("Aggregating reporting metrics for Program: {}", programId);
         List<UUID> applicationIds = disbursementRepository.findDistinctApplicationIdsByProgramId(programId);
 
-        return applicationIds.stream().map(appId -> {
-            long paidInstallments = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
-            List<GrantReport> reports = grantReportRepository.findByApplicationIdOrderBySubmittedDateDesc(appId);
-            String complianceStatus = resolveStatus(reports, paidInstallments);
+        return applicationIds.stream()
+                .map(appId -> {
+                    long paidInstallments = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
+                    List<GrantReport> reports = grantReportRepository.findByApplicationIdOrderBySubmittedDateDesc(appId);
 
-            return ApplicantComplianceDTO.builder()
-                    .applicationId(appId)
-                    .latestReportStatus(complianceStatus)
-                    .currentInstallment((int) paidInstallments)
-                    .build();
-        }).toList();
+                    // Only include applicants who have submitted at least one grant report
+                    if (reports.isEmpty()) return null;
+
+                    String complianceStatus = resolveStatus(reports, paidInstallments);
+                    UUID latestReportId = reports.get(0).getGrantReportId();
+
+                    String applicantName = "Unknown Applicant";
+                    String programName = null;
+                    try {
+                        ApplicationMetadataDTO meta = applicationClient.getApplicationMetadata(appId);
+                        if (meta != null) {
+                            applicantName = meta.getApplicantName() != null ? meta.getApplicantName() : "Unknown Applicant";
+                            programName = meta.getProgramName();
+                        }
+                    } catch (Exception e) {
+                        log.warn("Could not fetch metadata for application {}: {}", appId, e.getMessage());
+                    }
+
+                    return ApplicantComplianceDTO.builder()
+                            .applicationId(appId)
+                            .applicantName(applicantName)
+                            .programName(programName)
+                            .latestReportStatus(complianceStatus)
+                            .currentInstallment((int) paidInstallments)
+                            .reportId(latestReportId)
+                            .build();
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     /**
@@ -256,7 +281,7 @@ public class ComplianceServiceImpl implements ComplianceService {
                     .build();
             notificationClient.sendNotification(notification);
             log.debug("System alert successfully transmitted to user: {}", userId);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("Internal Notification Error: Feign Client failure: {}", e.getMessage());
         }
     }

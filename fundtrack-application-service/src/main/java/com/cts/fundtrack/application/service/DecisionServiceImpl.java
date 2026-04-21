@@ -18,6 +18,7 @@ import com.cts.fundtrack.application.repository.DocumentRepository;
 import com.cts.fundtrack.application.repository.RecommendationRepository;
 import com.cts.fundtrack.application.repository.ReviewRepository;
 import com.cts.fundtrack.common.aspect.Auditable;
+import com.cts.fundtrack.common.client.IdentityClient;
 import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.ApplicationDecisionDetailsDTO;
 import com.cts.fundtrack.common.dto.ApplicationResponseDTO;
@@ -74,6 +75,7 @@ public class DecisionServiceImpl implements DecisionService {
     private final ReviewRepository reviewRepository;
     private final RecommendationRepository recommendationRepository;
     private final NotificationClient notificationClient;
+    private final IdentityClient identityClient;
     private final HttpServletRequest request;
 
     /**
@@ -214,6 +216,13 @@ public class DecisionServiceImpl implements DecisionService {
         sendInternalNotification(getCurrentUserId(), app.getApplicationId(),
             "Success: You have finalized the adjudication for Application ID " + app.getApplicationId() + " as " + finalStatus,
             NotificationCategory.GENERAL);
+
+        // Broadcast to Finance Officers when application is APPROVED
+        if (finalStatus == ApplicationStatus.APPROVED || finalStatus == ApplicationStatus.ACCEPTED) {
+            notifyRole("FINANCE_OFFICER", app.getApplicationId(),
+                "Application " + app.getApplicationId() + " has been approved and is ready for disbursement scheduling.",
+                NotificationCategory.DISBURSEMENT);
+        }
     }
 
     @Override
@@ -304,6 +313,15 @@ public class DecisionServiceImpl implements DecisionService {
      * @param category the {@link com.cts.fundtrack.common.models.enums.NotificationCategory}
      *                 classifying the event type
      */
+    private void notifyRole(String role, UUID appId, String message, NotificationCategory category) {
+        try {
+            identityClient.getUserIdsByRole(role).forEach(uid ->
+                sendInternalNotification(uid, appId, message, category));
+        } catch (Exception e) {
+            log.error("Role-broadcast notification failed for role {}: {}", role, e.getMessage());
+        }
+    }
+
     private void sendInternalNotification(UUID userId, UUID appId, String message, NotificationCategory category) {
         if (userId == null) {
             log.warn("Notification aborted: Recipient user context is null.");

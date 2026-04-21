@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import com.cts.fundtrack.common.aspect.Auditable;
 import com.cts.fundtrack.common.client.AuditClient;
 import com.cts.fundtrack.common.dto.AuditRequestDTO;
-import com.cts.fundtrack.program.models.Program;
+import com.cts.fundtrack.common.dto.ProgramResponseDTO;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -89,8 +89,8 @@ public class AuditAspect {
 
             // 2. Extract Entity ID from the result
             UUID entityId = null;
-            if (result instanceof Program program) {
-                entityId = program.getProgramId();
+            if (result instanceof ProgramResponseDTO dto) {
+                entityId = dto.getProgramId();
             }
 
             // 3. Build the Audit DTO

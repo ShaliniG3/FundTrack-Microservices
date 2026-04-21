@@ -110,8 +110,7 @@ public class GrantReportController {
      */
     @Operation(summary = "Retrieve report history")
     @GetMapping("/grant_reports/{applicationId}")
-    @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN') or " +
-                  "(hasRole('APPLICANT') and @securityService.isApplicationOwner(#applicationId))")
+    @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER', 'ADMIN', 'APPLICANT')")
     public ResponseEntity<List<GrantReportResponseDTO>> getMyGrantReports(
             @PathVariable UUID applicationId) {
 
