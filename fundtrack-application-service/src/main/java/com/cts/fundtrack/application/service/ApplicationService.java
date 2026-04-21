@@ -125,4 +125,57 @@ public interface ApplicationService {
      *         applicant has no applications on record
      */
     List<ApplicationResponseDTO> getMyApplications(UUID applicantId);
+
+    /**
+     * Retrieves all grant applications submitted to a specific program.
+     *
+     * <p>Used by the Finance/Disbursement dashboard to list APPROVED and ACCEPTED
+     * applicants for payment scheduling, and by the Analytics Service for status
+     * distribution and financial summary calculations.</p>
+     *
+     * @param programId the UUID of the grant program
+     * @return a list of {@link ApplicationResponseDTO} objects for all applications
+     *         in the program; empty if no applications exist for the program
+     */
+    List<ApplicationResponseDTO> getApplicationsByProgramId(UUID programId);
+
+    /**
+     * Returns the UUIDs of all APPROVED applications for a program.
+     * Called internally by the Disbursement Service to determine which
+     * applicants receive a budget share during finalization.
+     *
+     * @param programId the UUID of the program
+     * @return list of approved application UUIDs; empty if none
+     */
+    List<UUID> getApprovedApplicationIds(UUID programId);
+
+    /**
+     * Returns {@code true} if any application for the program is still in
+     * {@code SUBMITTED} or {@code UNDER_REVIEW} status, blocking premature
+     * budget finalization.
+     *
+     * @param programId the UUID of the program
+     * @return {@code true} if pending reviews exist; {@code false} otherwise
+     */
+    Boolean hasPendingReviews(UUID programId);
+
+    /**
+     * Updates the lifecycle status of an application.
+     * Called internally by the Disbursement Service to move an application
+     * to {@code ACCEPTED} after its installment schedule is created.
+     *
+     * @param applicationId the UUID of the application to update
+     * @param newStatus     the target status string (e.g., {@code "ACCEPTED"})
+     */
+    void updateApplicationStatus(UUID applicationId, String newStatus);
+
+    /**
+     * Returns lightweight metadata for a single application.
+     * Used by the Disbursement Service for display and audit purposes.
+     *
+     * @param applicationId the UUID of the application
+     * @return an {@link com.cts.fundtrack.common.dto.ApplicationMetadataDTO}
+     *         with applicant ID, status, and best-effort name fields
+     */
+    com.cts.fundtrack.common.dto.ApplicationMetadataDTO getApplicationMetadata(UUID applicationId);
 }

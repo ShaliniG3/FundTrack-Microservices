@@ -50,4 +50,14 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
      *         empty if the applicant has no applications on record
      */
     List<Application> findAllByApplicantId(UUID applicantId);
+
+    /**
+     * Retrieves all applications submitted to a specific grant program, used by
+     * the Finance/Disbursement dashboard and Analytics Service.
+     *
+     * @param programId the UUID of the grant program
+     * @return a list of {@link Application} entities for the given program;
+     *         empty if no applications have been submitted to that program
+     */
+    List<Application> findByProgramId(UUID programId);
 }

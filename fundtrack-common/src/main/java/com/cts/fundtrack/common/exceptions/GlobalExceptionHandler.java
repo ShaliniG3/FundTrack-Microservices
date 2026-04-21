@@ -192,6 +192,25 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles unsupported or invalid document type errors during application submission.
+     */
+    @ExceptionHandler(UnsupportedDocumentTypeException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedDocumentType(UnsupportedDocumentTypeException ex,
+                                                                        HttpServletRequest request) {
+        log.warn("Document validation failed at {}: {}", getPath(request), ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), getPath(request));
+    }
+
+    /**
+     * Handles duplicate application submissions by the same applicant to the same program.
+     */
+    @ExceptionHandler(DuplicateApplicationException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateApplication(DuplicateApplicationException ex,
+                                                                     HttpServletRequest request) {
+        return buildResponse(HttpStatus.CONFLICT, ex.getMessage(), getPath(request));
+    }
+
+    /**
      * Handles unauthorized access attempts.
      */
     @ExceptionHandler(UnauthorizedAccessException.class)

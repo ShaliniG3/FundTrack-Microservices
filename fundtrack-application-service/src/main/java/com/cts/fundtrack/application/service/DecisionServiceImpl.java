@@ -173,7 +173,7 @@ public class DecisionServiceImpl implements DecisionService {
         ApplicationStatus finalStatus;
         try {
             finalStatus = ApplicationStatus.valueOf(dto.getDecision().toUpperCase());
-            if (finalStatus != ApplicationStatus.APPROVED && finalStatus != ApplicationStatus.REJECTED) {
+            if (finalStatus != ApplicationStatus.APPROVED && finalStatus != ApplicationStatus.ACCEPTED && finalStatus != ApplicationStatus.REJECTED) {
                 throw new IllegalArgumentException();
             }
         } catch (IllegalArgumentException e) {
@@ -203,7 +203,7 @@ public class DecisionServiceImpl implements DecisionService {
         }
 
         // Workflow Notification (Target: Applicant)
-        NotificationCategory workflowCat = (finalStatus == ApplicationStatus.APPROVED)
+        NotificationCategory workflowCat = (finalStatus == ApplicationStatus.APPROVED || finalStatus == ApplicationStatus.ACCEPTED)
                 ? NotificationCategory.APPROVAL
                 : NotificationCategory.REJECTED;
 
@@ -226,7 +226,7 @@ public class DecisionServiceImpl implements DecisionService {
         ApplicationStatus newStatus;
         try {
             newStatus = ApplicationStatus.valueOf(dto.getDecision().toUpperCase());
-            if (newStatus != ApplicationStatus.APPROVED && newStatus != ApplicationStatus.REJECTED) {
+            if (newStatus != ApplicationStatus.APPROVED && newStatus != ApplicationStatus.ACCEPTED && newStatus != ApplicationStatus.REJECTED) {
                 throw new IllegalArgumentException();
             }
         } catch (IllegalArgumentException e) {

@@ -72,8 +72,8 @@ public class ProgramServiceImpl implements ProgramService {
      *         (case-insensitive); {@code false} otherwise or if the header is absent.
      */
     private boolean isApplicant() {
-        String role = request.getHeader("X-User-Role");
-        return "ROLE_APPLICANT".equalsIgnoreCase(role);
+        String role = request.getHeader("X-User-Roles");
+        return "APPLICANT".equalsIgnoreCase(role);
     }
 
     /**

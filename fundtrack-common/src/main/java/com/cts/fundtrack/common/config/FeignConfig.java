@@ -50,12 +50,12 @@ public class FeignConfig {
                 
                 // Pull the headers from the Gateway-to-Application call
                 String userId = request.getHeader("X-User-Id");
-                String userRole = request.getHeader("X-User-Role");
+                String userRoles = request.getHeader("X-User-Roles");
                 String userEmail = request.getHeader("X-User-Email");
 
                 // "Stamp" them onto the Application-to-Program call
                 if (userId != null) requestTemplate.header("X-User-Id", userId);
-                if (userRole != null) requestTemplate.header("X-User-Role", userRole);
+                if (userRoles != null) requestTemplate.header("X-User-Roles", userRoles);
                 if (userEmail != null) requestTemplate.header("X-User-Email", userEmail);
             }
         };

@@ -190,4 +190,22 @@ public class ApplicationController {
             @RequestHeader("X-User-Id") UUID applicantId) {
         return ResponseEntity.ok(applicationService.getMyApplications(applicantId));
     }
+
+    /**
+     * Retrieves all grant applications submitted to a specific program.
+     *
+     * <p>Used by the Finance/Disbursement dashboard to list APPROVED and ACCEPTED
+     * applicants for payment scheduling, and consumed internally by the Analytics
+     * Service via Feign for status distribution and financial summary data.</p>
+     *
+     * @param programId the UUID of the grant program
+     * @return a {@link ResponseEntity} with HTTP 200 and a list of
+     *         {@link ApplicationResponseDTO} objects for all applications in the program
+     */
+    @GetMapping("/program/{programId}")
+    @PreAuthorize("hasAnyRole('FINANCE_OFFICER', 'ADMIN')")
+    public ResponseEntity<List<ApplicationResponseDTO>> getApplicationsByProgram(
+            @PathVariable UUID programId) {
+        return ResponseEntity.ok(applicationService.getApplicationsByProgramId(programId));
+    }
 }

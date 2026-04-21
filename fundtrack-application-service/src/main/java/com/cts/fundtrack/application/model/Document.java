@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.cts.fundtrack.common.models.enums.VerificationStatus;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -68,9 +69,11 @@ public class Document {
     private String docType;
 
     /**
-     * The URI or relative path pointing to the stored file
-     * (e.g., a cloud storage path or local file URI).
+     * The URI or relative path pointing to the stored file.
+     * MEDIUMTEXT (up to 16 MB) is required because documents are stored
+     * as base64 data URIs (e.g., "data:image/jpeg;base64,...").
      */
+    @Column(columnDefinition = "MEDIUMTEXT")
     private String fileUri;
 
     /**

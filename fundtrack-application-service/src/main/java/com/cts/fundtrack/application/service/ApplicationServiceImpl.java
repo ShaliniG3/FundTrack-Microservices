@@ -6,8 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
-
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
@@ -65,6 +63,12 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final NotificationClient notificationClient;
     private final HttpServletRequest request;
 
+    // Self-injection via @Lazy to call @Transactional/@Auditable methods through
+    // the Spring proxy instead of bypassing it with 'this' (fixes S6809)
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private ApplicationServiceImpl self;
+
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList("pdf", "jpg", "jpeg", "png");
 
     /**
@@ -105,11 +109,12 @@ public class ApplicationServiceImpl implements ApplicationService {
         sendInternalNotification(getCurrentUserId(), saved.getApplicationId(),
             "Success: Your application for Program ID " + dto.getProgramId() + " has been received.", NotificationCategory.SUBMITTED);
 
-        this.performValidation(saved.getApplicationId());
+        self.performValidation(saved.getApplicationId());
 
-        return applicationRepo.findById(saved.getApplicationId())
+        ApplicationResponseDTO response = applicationRepo.findById(saved.getApplicationId())
                 .map(applicationMapper::toResponseDTO)
                 .orElseThrow(() -> new ApplicationNotFoundException(saved.getApplicationId()));
+        return enrichResponse(response);
     }
 
     /**
@@ -175,22 +180,22 @@ public class ApplicationServiceImpl implements ApplicationService {
         log.info("Updating data for Application ID: {}", applicationId);
         Application app = fetchApplication(applicationId);
 
-        if (app.getStatus() == ApplicationStatus.APPROVED || app.getStatus() == ApplicationStatus.REJECTED) {
+        if (app.getStatus() == ApplicationStatus.APPROVED || app.getStatus() == ApplicationStatus.ACCEPTED || app.getStatus() == ApplicationStatus.REJECTED) {
             throw new InvalidApplicationStateException("Updates are not permitted for applications in " + app.getStatus() + " state.");
         }
 
         if (dto.getApplicationData() != null && !dto.getApplicationData().equals(app.getApplicationData())) {
             app.setApplicationData(dto.getApplicationData());
             app.setStatus(ApplicationStatus.SUBMITTED);
-            app = applicationRepo.saveAndFlush(app);
+            applicationRepo.saveAndFlush(app);
 
             sendInternalNotification(getCurrentUserId(), applicationId,
                 "Confirmation: You have successfully updated your application details.", NotificationCategory.APPLICATION);
 
-            this.performValidation(applicationId);
+            self.performValidation(applicationId);
         }
 
-        return applicationMapper.toResponseDTO(fetchApplication(applicationId));
+        return enrichResponse(applicationMapper.toResponseDTO(fetchApplication(applicationId)));
     }
 
     @Override
@@ -198,7 +203,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Auditable(action = ActionType.DELETE, entityName = EntityType.APPLICATION)
     public void deleteApplication(UUID applicationId) {
         log.warn("Deleting application record: {}", applicationId);
-        Application app = fetchApplication(applicationId);
+        fetchApplication(applicationId);
         applicationRepo.deleteById(applicationId);
 
         sendInternalNotification(getCurrentUserId(), null,
@@ -223,13 +228,31 @@ public class ApplicationServiceImpl implements ApplicationService {
      */
     private void validateAndSaveDocument(Application app, DocumentDTO docDto) {
         String fileUrl = docDto.getFileUri();
-        if (fileUrl == null || !fileUrl.contains(".")) {
-             throw new UnsupportedDocumentTypeException("Invalid Document: Missing file extension.");
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new UnsupportedDocumentTypeException("Invalid Document: File URI is missing.");
         }
 
-        String extension = fileUrl.substring(fileUrl.lastIndexOf(".") + 1).toLowerCase();
+        String extension;
+        if (fileUrl.startsWith("data:")) {
+            // Base64 data URI: data:<mimeType>;base64,<data>
+            // Extract extension from MIME type, e.g. "data:image/jpeg;base64,..." -> "jpeg"
+            try {
+                String mimeType = fileUrl.substring(5, fileUrl.indexOf(';'));
+                extension = mimeType.substring(mimeType.indexOf('/') + 1).toLowerCase();
+            } catch (Exception e) {
+                throw new UnsupportedDocumentTypeException("Invalid Document: Unrecognised data URI format.");
+            }
+        } else {
+            // Regular file path or URL — extract extension after the last dot
+            int dotIndex = fileUrl.lastIndexOf('.');
+            if (dotIndex == -1 || dotIndex == fileUrl.length() - 1) {
+                throw new UnsupportedDocumentTypeException("Invalid Document: Missing file extension.");
+            }
+            extension = fileUrl.substring(dotIndex + 1).toLowerCase();
+        }
+
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new UnsupportedDocumentTypeException("Extension ." + extension + " is strictly prohibited.");
+            throw new UnsupportedDocumentTypeException("Unsupported file type '." + extension + "'. Allowed types: pdf, jpg, jpeg, png.");
         }
 
         Document doc = Document.builder()
@@ -271,7 +294,21 @@ public class ApplicationServiceImpl implements ApplicationService {
             for (String pair : pairs) {
                 String[] keyValue = pair.split("=");
                 if (keyValue.length == 2) {
-                    variables.put(keyValue[0].trim().toLowerCase(), keyValue[1].trim());
+                    String key = keyValue[0].trim().toLowerCase();
+                    String raw = keyValue[1].trim();
+                    // Parse numeric values so SpEL can compare them with integer/decimal literals.
+                    // Without this, "50000" >= 10000 throws a type-mismatch and always returns false.
+                    Object value;
+                    try {
+                        value = Long.parseLong(raw);
+                    } catch (NumberFormatException e1) {
+                        try {
+                            value = Double.parseDouble(raw);
+                        } catch (NumberFormatException e2) {
+                            value = raw; // keep as String for non-numeric values
+                        }
+                    }
+                    variables.put(key, value);
                 }
             }
 
@@ -300,13 +337,13 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     public List<DocumentDTO> getDocumentsByApplicationId(UUID applicationId) {
         return fetchApplication(applicationId).getDocuments().stream()
-                .map(applicationMapper::toDocumentDTO).collect(Collectors.toList());
+                .map(applicationMapper::toDocumentDTO).toList();
     }
 
     @Override
     public List<ValidationResultDTO> getValidationResults(UUID applicationId) {
         return validationRepo.findByApplication_ApplicationId(applicationId).stream()
-                .map(applicationMapper::toValidationDTO).collect(Collectors.toList());
+                .map(applicationMapper::toValidationDTO).toList();
     }
 
     @Override
@@ -334,26 +371,102 @@ public class ApplicationServiceImpl implements ApplicationService {
         return applicationRepo.findAllByApplicantId(applicantId)
                 .stream()
                 .map(applicationMapper::toResponseDTO)
-                .collect(Collectors.toList());
+                .map(this::enrichResponse)
+                .toList();
+    }
+
+    @Override
+    public List<ApplicationResponseDTO> getApplicationsByProgramId(UUID programId) {
+        log.info("Fetching all applications for programId: {}", programId);
+        return applicationRepo.findByProgramId(programId)
+                .stream()
+                .map(applicationMapper::toResponseDTO)
+                .map(this::enrichProgramName)
+                .toList();
+    }
+
+    @Override
+    public List<UUID> getApprovedApplicationIds(UUID programId) {
+        log.info("Fetching approved application IDs for programId: {}", programId);
+        return applicationRepo.findByProgramId(programId)
+                .stream()
+                .filter(a -> a.getStatus() == ApplicationStatus.APPROVED)
+                .map(Application::getApplicationId)
+                .toList();
+    }
+
+    @Override
+    public Boolean hasPendingReviews(UUID programId) {
+        log.info("Checking for pending reviews for programId: {}", programId);
+        return applicationRepo.findByProgramId(programId)
+                .stream()
+                .anyMatch(a -> a.getStatus() == ApplicationStatus.SUBMITTED
+                            || a.getStatus() == ApplicationStatus.UNDER_REVIEW);
+    }
+
+    @Override
+    @Transactional
+    public void updateApplicationStatus(UUID applicationId, String newStatus) {
+        log.info("Updating status of application {} to {}", applicationId, newStatus);
+        Application app = fetchApplication(applicationId);
+        app.setStatus(ApplicationStatus.valueOf(newStatus.toUpperCase()));
+        applicationRepo.save(app);
+    }
+
+    @Override
+    public com.cts.fundtrack.common.dto.ApplicationMetadataDTO getApplicationMetadata(UUID applicationId) {
+        Application app = fetchApplication(applicationId);
+        return com.cts.fundtrack.common.dto.ApplicationMetadataDTO.builder()
+                .applicationId(app.getApplicationId())
+                .applicantUserId(app.getApplicantId())
+                .status(app.getStatus() != null ? app.getStatus().name() : null)
+                .build();
     }
 
     /**
-     * Dispatches an in-system notification to the specified user via the Notification
-     * Service Feign client.
-     *
-     * <p>The call is fire-and-forget: any exception from the Notification Service is
-     * caught and logged so that notification failures never disrupt core application
-     * business logic. If {@code userId} is {@code null} the call is skipped entirely
-     * with a warning log.</p>
-     *
-     * @param userId the UUID of the notification recipient; if {@code null} the
-     *               notification is silently skipped
-     * @param appId  the UUID of the related application to include in the notification
-     *               payload; may be {@code null} for non-application-specific messages
-     * @param msg    the human-readable notification message body
-     * @param cat    the {@link com.cts.fundtrack.common.models.enums.NotificationCategory}
-     *               classifying the event type
+     * Enriches an {@link ApplicationResponseDTO} with the {@code programName} fetched
+     * from the Program Service. Unlike {@link #enrichResponse}, this does NOT set
+     * {@code userName} from the current request header — when fetching applications
+     * for a whole program, each application belongs to a different applicant and the
+     * {@code X-User-Email} header represents the Finance manager, not the individual applicant.
      */
+    private ApplicationResponseDTO enrichProgramName(ApplicationResponseDTO response) {
+        try {
+            ProgramRequirementsDTO requirements = programServiceClient.getRequirements(response.getProgramId());
+            if (requirements != null) {
+                response.setProgramName(requirements.getProgramName());
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch program name for programId={}: {}", response.getProgramId(), e.getMessage());
+        }
+        return response;
+    }
+
+    /**
+     * Enriches an {@link ApplicationResponseDTO} with {@code programName} and {@code userName}
+     * that the mapper cannot populate on its own (mapper has no service dependencies).
+     *
+     * <p>Program name is fetched from the Program Service via the existing
+     * {@code getRequirements} Feign call (which already carries the field).
+     * User name is read from the {@code X-User-Email} gateway header on the
+     * current request — the identity service is not wired into this service.</p>
+     *
+     * <p>Both lookups are best-effort: failures are logged and the field is left
+     * {@code null} rather than propagating an exception.</p>
+     */
+    private ApplicationResponseDTO enrichResponse(ApplicationResponseDTO response) {
+        try {
+            ProgramRequirementsDTO requirements = programServiceClient.getRequirements(response.getProgramId());
+            if (requirements != null) {
+                response.setProgramName(requirements.getProgramName());
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch program name for programId={}: {}", response.getProgramId(), e.getMessage());
+        }
+        response.setUserName(request.getHeader("X-User-Email"));
+        return response;
+    }
+
     private void sendInternalNotification(UUID userId, UUID appId, String msg, NotificationCategory cat) {
         if (userId == null) {
             log.warn("Notification skipped: Null user context.");

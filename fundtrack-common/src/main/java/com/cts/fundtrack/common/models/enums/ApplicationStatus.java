@@ -5,7 +5,7 @@ package com.cts.fundtrack.common.models.enums;
  *
  * <p>Applications follow this state progression:</p>
  * <pre>
- *   DRAFT → SUBMITTED → UNDER_REVIEW → APPROVED | REJECTED
+ *   DRAFT → SUBMITTED → UNDER_REVIEW → APPROVED | ACCEPTED | REJECTED
  * </pre>
  */
 public enum ApplicationStatus {
@@ -21,6 +21,9 @@ public enum ApplicationStatus {
 
     /** The application has been approved by an Approver and grant funding will be disbursed. */
     APPROVED,
+
+    /** The application has been accepted by an Approver; grant offer is confirmed and pending disbursement. */
+    ACCEPTED,
 
     /** The application has been rejected by an Approver; no funding will be disbursed. */
     REJECTED
