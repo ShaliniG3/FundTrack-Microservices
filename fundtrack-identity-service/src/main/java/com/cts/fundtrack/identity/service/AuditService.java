@@ -1,8 +1,12 @@
 package com.cts.fundtrack.identity.service;
 
+import com.cts.fundtrack.identity.model.AuditLog;
 import com.cts.fundtrack.identity.model.User;
 import com.cts.fundtrack.common.models.enums.ActionType;
 import com.cts.fundtrack.common.models.enums.EntityType;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Service interface defining the contract for programmatic audit logging within
@@ -38,4 +42,6 @@ public interface AuditService {
      *                   affected domain object (e.g., {@code USER})
      */
     void logUserAction(User user, ActionType action, EntityType entityType);
+    List<AuditLog> getUserAuditLogs(UUID userId);
+    List<AuditLog> getLogsByAction(com.cts.fundtrack.common.models.enums.ActionType action);
 }

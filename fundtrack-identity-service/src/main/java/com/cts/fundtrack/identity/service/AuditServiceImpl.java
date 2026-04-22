@@ -6,9 +6,13 @@ import com.cts.fundtrack.identity.repository.AuditRepository;
 import com.cts.fundtrack.common.models.enums.ActionType;
 import com.cts.fundtrack.common.models.enums.EntityType;
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Default implementation of {@link AuditService} that builds and persists
@@ -20,7 +24,7 @@ import java.time.Instant;
  * indicate the domain type (typically {@code EntityType.USER}).</p>
  *
  * <p>The timestamp is set explicitly at creation time via {@link Instant#now()} and
- * also guarded by the {@link AuditLog#onCreate()} JPA lifecycle callback, so every
+ * also guarded by the {@link AuditLog //onCreate()} JPA lifecycle callback, so every
  * record is guaranteed to carry an accurate UTC timestamp regardless of how it is
  * constructed.</p>
  *
@@ -59,5 +63,14 @@ public class AuditServiceImpl implements AuditService {
                 .build();
 
         auditRepository.save(log);
+    }
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuditLog> getUserAuditLogs(UUID userId) {
+        return auditRepository.findByUser_UserId(userId);
+    }
+    @Override
+    public List<AuditLog> getLogsByAction(com.cts.fundtrack.common.models.enums.ActionType action) {
+        return auditRepository.findByAction(action);
     }
 }

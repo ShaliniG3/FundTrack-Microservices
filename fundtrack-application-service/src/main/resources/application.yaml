@@ -12,7 +12,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/application_db?createDatabaseIfNotExist=true
     username: root
-    password: Sonu@4002
+    password: Password@123
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   # JPA / Hibernate settings
