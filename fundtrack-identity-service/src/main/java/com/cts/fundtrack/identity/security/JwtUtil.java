@@ -87,11 +87,11 @@ public class JwtUtil {
         Instant expiry = now.plusMillis(tokenExpirationMs);
 
         return Jwts.builder()
-                .setSubject(email)
+                .subject(email)
                 .claim("role", role)
                 .claim("userId", userId.toString())
-                .setIssuedAt(Date.from(now))
-                .setExpiration(Date.from(expiry))
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(expiry))
                 .signWith(key)
                 .compact();
     }
@@ -106,11 +106,11 @@ public class JwtUtil {
      *                               is malformed
      */
     public Claims parse(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(key)
+        return Jwts.parser()
+                .verifyWith(key)
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     /**

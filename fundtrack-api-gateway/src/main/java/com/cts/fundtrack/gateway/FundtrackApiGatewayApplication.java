@@ -34,7 +34,21 @@ public class FundtrackApiGatewayApplication {
             // 3. Lifecycle Service Route
             .route("lifecycle-service", r -> r.path("/api/lifecycle/**")
                 .uri("lb://FUNDTRACK-LIFECYCLE-SERVICE"))
-            .build();
 
-    }
+         // 4. Analytics Service Route (Ensuring path is preserved)
+.route("analytics-service", r -> r.path("/api/v1/analytics/**")
+    .uri("lb://FUNDTRACK-ANALYTICS-SERVICE"))
+        
+
+            .route("disbursement-service",
+    r -> r.path(
+        "/api/v1/disbursements/**",
+        "/api/v1/payments/**",
+        "/api/v1/compliance/**",
+        "/api/v1/reports/**"
+    )
+    .uri("lb://fundtrack-disbursement-service"))
+
+        .build();
+        }
 }

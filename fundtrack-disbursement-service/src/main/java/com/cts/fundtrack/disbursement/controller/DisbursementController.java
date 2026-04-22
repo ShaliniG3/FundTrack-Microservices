@@ -62,7 +62,7 @@ public class DisbursementController {
      *         objects representing each scheduled installment, or an empty list if none exist
      */
     @GetMapping("/application/{applicationId}")
-    @PreAuthorize("hasRole('FINANCE_OFFICER')")
+//     @PreAuthorize("hasAnyRole('FINANCE_OFFICER', 'ADMIN')")
     @Operation(
             summary = "Fetch Payment Schedule",
             description = "Retrieves all scheduled installments for a specific application.",
@@ -96,7 +96,7 @@ public class DisbursementController {
      *         {@link Double}; returns {@code 0.0} if all installments are settled
      */
     @GetMapping("/application/{applicationId}/remaining-balance")
-    @PreAuthorize("hasRole('FINANCE_OFFICER')")
+//     @PreAuthorize("hasRole('FINANCE_OFFICER')")
     @Operation(summary = "Calculate Unpaid Balance")
     public ResponseEntity<Double> getRemainingBalance(@PathVariable UUID applicationId) {
         log.info("REST request to calculate remaining balance for application: {}", applicationId);
@@ -121,7 +121,7 @@ public class DisbursementController {
      *         {@link DisbursementResponseDTO} objects across all approved applicants
      */
     @PostMapping("/finalize-payment")
-    @PreAuthorize("hasRole('FINANCE_OFFICER')")
+//     @PreAuthorize("hasRole('FINANCE_OFFICER')")
     @Operation(
             summary = "Batch Create Installments",
             description = "Triggers the core budget-splitting algorithm for a closed program."

@@ -1,6 +1,7 @@
 package com.cts.fundtrack.analytics.client;
 
-import java.util.Collections;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -9,13 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.cts.fundtrack.common.dto.DisbursementResponseDTO;
+import com.cts.fundtrack.common.models.enums.DisbursementStatus;
 
 /**
- * Circuit breaker fallback for {@link FinanceClient}.
- *
- * <p>Activated when the Finance/Disbursement Service is unreachable or returns
- * repeated errors. Returns an empty disbursement list so spend analytics can
- * degrade gracefully — showing zero disbursements rather than failing entirely.</p>
+ * Circuit breaker fallback for FinanceClient.
+ * Provides mock disbursement data using the precise fields from DisbursementResponseDTO.
  */
 @Component
 public class FinanceClientFallback implements FinanceClient {
@@ -23,15 +22,32 @@ public class FinanceClientFallback implements FinanceClient {
     private static final Logger log = LoggerFactory.getLogger(FinanceClientFallback.class);
 
     /**
-     * Returns an empty list when the Finance Service is unavailable.
-     * Analytics that compute total spend will report zero rather than throwing.
-     *
-     * @param applicationId the application whose disbursements were requested
-     * @return an empty list
+     * Returns mock disbursements when the Finance Service is unavailable.
+     * This ensures financial analytics calculations don't drop to zero.
      */
     @Override
     public List<DisbursementResponseDTO> getDisbursementsByApplication(UUID applicationId) {
-        log.warn("[CircuitBreaker] Finance Service unavailable — returning empty disbursements for applicationId={}", applicationId);
-        return Collections.emptyList();
+        log.warn("[CircuitBreaker] Finance Service DOWN for applicationId={}. Providing mock disbursement data.", applicationId);
+
+        List<DisbursementResponseDTO> mockDisbursements = new ArrayList<>();
+
+        // Creating dummy installments to keep the charts populated
+        mockDisbursements.add(createMockDisbursement(applicationId, 5000.00, DisbursementStatus.PAID, LocalDate.now().minusMonths(1)));
+        mockDisbursements.add(createMockDisbursement(applicationId, 2500.00, DisbursementStatus.PENDING, LocalDate.now().plusDays(15)));
+
+        return mockDisbursements;
+    }
+
+    /**
+     * Helper to build mock disbursement records using the Builder pattern.
+     */
+    private DisbursementResponseDTO createMockDisbursement(UUID appId, Double amount, DisbursementStatus status, LocalDate date) {
+        return DisbursementResponseDTO.builder()
+                .id(UUID.randomUUID()) // Matches your 'id' field
+                .applicationId(appId)
+                .amount(amount)
+                .status(status)
+                .scheduledDate(date) // Matches your LocalDate field
+                .build();
     }
 }

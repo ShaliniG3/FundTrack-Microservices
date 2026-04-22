@@ -17,7 +17,7 @@ import com.cts.fundtrack.common.dto.DisbursementResponseDTO;
  * which are necessary for calculating funding analytics and spend tracking.
  */
 @FeignClient(
-    name = "finance-service",
+    name = "fundtrack-disbursement-service",
     configuration = FeignConfig.class,
     fallback = FinanceClientFallback.class
 )

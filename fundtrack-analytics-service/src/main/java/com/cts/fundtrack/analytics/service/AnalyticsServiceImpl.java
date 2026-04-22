@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.cts.fundtrack.analytics.client.ApplicationClient;
 import com.cts.fundtrack.analytics.client.FinanceClient;
+import com.cts.fundtrack.analytics.client.ProgramClient;
 import com.cts.fundtrack.common.aspect.Auditable; // 👈 IMPORT YOUR COMMON ANNOTATION
 import com.cts.fundtrack.common.dto.ApplicationResponseDTO;
 import com.cts.fundtrack.common.dto.DailyAnalysisDTO;
@@ -21,6 +22,7 @@ import com.cts.fundtrack.common.dto.ProgramResponseDTO;
 import com.cts.fundtrack.common.dto.StatusCountDTO;
 import com.cts.fundtrack.common.dto.StatusDistributionDTO;
 import com.cts.fundtrack.common.models.enums.ActionType; // 👈 IMPORT ENUMS
+import com.cts.fundtrack.common.models.enums.ApplicationStatus;
 import com.cts.fundtrack.common.models.enums.EntityType;
 import com.cts.fundtrack.common.models.enums.GrantStatus;
 
@@ -48,6 +50,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
 
     private final ApplicationClient applicationClient;
     private final FinanceClient financeClient;
+    private final ProgramClient programClient;
 
     @Override
     @Auditable(action = ActionType.READ, entityName = EntityType.PROGRAM) // 👈 AUDIT ENABLED
@@ -55,9 +58,13 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         log.info("Fetching status distribution for programId: {}", programId);
         List<ApplicationResponseDTO> apps = applicationClient.getApplicationsByProgram(programId);
 
+        // DRAFT has no analytics meaning; ACCEPTED is treated as APPROVED (offer confirmed)
         Map<GrantStatus, Long> counts = apps.stream()
+                .filter(app -> app.getStatus() != ApplicationStatus.DRAFT)
                 .collect(Collectors.groupingBy(
-                        app -> GrantStatus.valueOf(app.getStatus().name()),
+                        app -> app.getStatus() == ApplicationStatus.ACCEPTED
+                                ? GrantStatus.APPROVED
+                                : GrantStatus.valueOf(app.getStatus().name()),
                         Collectors.counting()
                 ));
 
@@ -75,6 +82,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         List<ApplicationResponseDTO> apps = applicationClient.getApplicationsByProgram(programId);
 
         Map<LocalDate, List<ApplicationResponseDTO>> groupedByDate = apps.stream()
+                .filter(app -> app.getSubmittedDate() != null)
                 .collect(Collectors.groupingBy(app ->
                         app.getSubmittedDate()
                                 .atZone(ZoneId.systemDefault())
@@ -103,7 +111,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     public FinanceSummaryDTO getFinanceSummary(UUID programId) {
         log.info("Generating finance summary for programId: {}", programId);
 
-        ProgramResponseDTO program = applicationClient.getProgramDetails(programId);
+        ProgramResponseDTO program = programClient.getProgramDetails(programId);
         List<ApplicationResponseDTO> apps = applicationClient.getApplicationsByProgram(programId);
 
         List<DisbursementResponseDTO> allDisbursements = apps.stream()
@@ -120,7 +128,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 .mapToDouble(DisbursementResponseDTO::getAmount).sum();
 
         long approvedCount = apps.stream()
-                .filter(a -> GrantStatus.APPROVED.equals(a.getStatus()))
+                .filter(a -> a.getStatus() == ApplicationStatus.APPROVED
+                          || a.getStatus() == ApplicationStatus.ACCEPTED)
                 .count();
 
         double budget = (program.getBudget() != null) ? program.getBudget() : 0.0;
@@ -145,7 +154,14 @@ public class AnalyticsServiceImpl implements AnalyticsService {
      */
     private Long countByStatus(List<ApplicationResponseDTO> apps, String status) {
         return apps.stream()
-                .filter(a -> status.equals(a.getStatus().name()))
+                .filter(a -> {
+                    String name = a.getStatus().name();
+                    // ACCEPTED is counted alongside APPROVED in analytics charts
+                    if ("APPROVED".equals(status)) {
+                        return "APPROVED".equals(name) || "ACCEPTED".equals(name);
+                    }
+                    return status.equals(name);
+                })
                 .count();
     }
 }

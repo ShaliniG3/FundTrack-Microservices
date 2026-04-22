@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
@@ -23,9 +24,24 @@ import com.cts.fundtrack.application.repository.ApplicationValidationRepository;
 import com.cts.fundtrack.application.repository.DocumentRepository;
 import com.cts.fundtrack.common.aspect.Auditable;
 import com.cts.fundtrack.common.client.NotificationClient;
-import com.cts.fundtrack.common.dto.*;
-import com.cts.fundtrack.common.exceptions.*;
-import com.cts.fundtrack.common.models.enums.*;
+import com.cts.fundtrack.common.dto.ApplicantDetailsDTO;
+import com.cts.fundtrack.common.dto.ApplicationRequestDTO;
+import com.cts.fundtrack.common.dto.ApplicationResponseDTO;
+import com.cts.fundtrack.common.dto.ApplicationUpdateDTO;
+import com.cts.fundtrack.common.dto.DocumentDTO;
+import com.cts.fundtrack.common.dto.EligibilityRuleDTO;
+import com.cts.fundtrack.common.dto.NotificationRequestDTO;
+import com.cts.fundtrack.common.dto.ProgramRequirementsDTO;
+import com.cts.fundtrack.common.dto.ValidationResultDTO;
+import com.cts.fundtrack.common.exceptions.ApplicationNotFoundException;
+import com.cts.fundtrack.common.exceptions.DuplicateApplicationException;
+import com.cts.fundtrack.common.exceptions.InvalidApplicationStateException;
+import com.cts.fundtrack.common.exceptions.UnsupportedDocumentTypeException;
+import com.cts.fundtrack.common.models.enums.ActionType;
+import com.cts.fundtrack.common.models.enums.ApplicationStatus;
+import com.cts.fundtrack.common.models.enums.EntityType;
+import com.cts.fundtrack.common.models.enums.NotificationCategory;
+import com.cts.fundtrack.common.models.enums.VerificationStatus;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -90,7 +106,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         log.info("Processing application submission for Applicant: {} to Program: {}", applicantId, dto.getProgramId());
 
         if (applicationRepo.existsByApplicantIdAndProgramId(applicantId, dto.getProgramId())) {
-            throw new DuplicateApplicationException(applicantId, dto.getProgramId());
+            throw new DuplicateApplicationException();
         }
 
         Application application = applicationMapper.toEntity(dto);
@@ -301,9 +317,11 @@ public class ApplicationServiceImpl implements ApplicationService {
                     Object value;
                     try {
                         value = Long.parseLong(raw);
+                        System.out.println(value);
                     } catch (NumberFormatException e1) {
                         try {
                             value = Double.parseDouble(raw);
+                             System.out.println(value);
                         } catch (NumberFormatException e2) {
                             value = raw; // keep as String for non-numeric values
                         }

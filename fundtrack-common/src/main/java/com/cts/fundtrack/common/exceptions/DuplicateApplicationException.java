@@ -19,7 +19,7 @@ public class DuplicateApplicationException extends RuntimeException {
      * @param applicantId the UUID of the applicant who already has an existing application
      * @param programId   the UUID of the program the applicant is trying to apply to again
      */
-    public DuplicateApplicationException(UUID applicantId, UUID programId) {
-        super("Applicant " + applicantId + " has already submitted an application for program " + programId);
+    public DuplicateApplicationException() {
+        super("Applicant has already submitted an application for this program " );
     }
 }
