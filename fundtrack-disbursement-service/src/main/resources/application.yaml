@@ -9,13 +9,12 @@ spring:
   application:
     name: fundtrack-disbursement-service
   
-  # 🛠️ Database Configuration (Fixes your current error)
   datasource:
     url: jdbc:mysql://localhost:3306/disbursement_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
     username: root
-    password: Sonu@4002 # Update this!
+    password: WilliamAsher@24
     driver-class-name: com.mysql.cj.jdbc.Driver
-  
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -24,41 +23,41 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
 
-# 🛰️ Service Discovery
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
   instance:
     prefer-ip-address: true
-    ip-address: 127.0.0.1 # Crucial for local microservice networking
+    ip-address: 127.0.0.1
 
-# 🛡️ Resiliency & Communication
 springdoc:
   api-docs:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
 
-# Enable Feign Circuit Breakers (Required for your Fallbacks)
-spring:
-  cloud:
-    openfeign:
-      circuitbreaker:
-        enabled: true
-
-# Resilience4j Circuit Breaker Configuration
 resilience4j:
   circuitbreaker:
     instances:
-      default:
+      fundtrack-application-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        minimum-number-of-calls: 5
+      fundtrack-program-service:
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 3
         minimum-number-of-calls: 5
 
-# 🩺 Monitoring & Management
 management:
   endpoints:
     web:

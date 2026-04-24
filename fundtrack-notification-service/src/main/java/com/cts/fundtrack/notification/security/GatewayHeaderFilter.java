@@ -67,8 +67,8 @@ public class GatewayHeaderFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         // 1. Extract values injected by your API Gateway
-        String role = request.getHeader("X-User-Role");   // Expecting "ROLE_ADMIN" or "ROLE_APPLICANT"
-        String email = request.getHeader("X-User-Email");
+        String role = request.getHeader("X-User-Roles");   // Expecting "ROLE_ADMIN" or "ROLE_APPLICANT"
+        String email = request.getHeader("X-User-Id");
 
         if (role != null && email != null) {
             // 2. Convert the role string into a Spring Authority

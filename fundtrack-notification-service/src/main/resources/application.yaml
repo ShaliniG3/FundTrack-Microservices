@@ -9,7 +9,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/fundtrack_notification_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
     username: root
-    password: Sonu@4002  # Update this to your MySQL password
+    password: WilliamAsher@24  # Update this to your MySQL password
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   # JPA / Hibernate Settings
@@ -31,8 +31,8 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka
-    instance:
-      prefer-ip-address: true
+  instance:
+    prefer-ip-address: true
 
 # Feign Logging (Useful for debugging your Audit calls)
 logging:

@@ -1,0 +1,1308 @@
+{
+  "info": {
+    "_postman_id": "fundtrack-ms-api-v1",
+    "name": "FundTrack Microservices API",
+    "description": "Complete REST API collection for the FundTrack grant management microservices platform.\n\n**Entry point:** All requests go through the API Gateway at `{{base_url}}` (default: http://localhost:8081).\n\n**Authentication:**\n- Public routes: `/api/v1/auth/**` — no token required.\n- All other routes require `Authorization: Bearer {{token}}`.\n- Analytics endpoints additionally require `ADMIN` role.\n\n**Quick Start:**\n1. Run `Login` — the post-response script auto-sets `{{token}}` and `{{refresh_token}}`.\n2. Use the populated `{{token}}` for all subsequent requests.\n3. Override ID variables (`{{program_id}}`, `{{application_id}}`, etc.) in the collection or environment as needed.\n\n**Gateway Header Injection:**\nThe API Gateway extracts `X-User-Id`, `X-User-Email`, and `X-User-Roles` from the JWT and injects them as headers before forwarding to downstream services. Clients should NOT set these headers manually.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081",
+      "type": "string",
+      "description": "API Gateway base URL"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token — auto-set by the Login request script"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string",
+      "description": "Refresh token — auto-set by the Login request script"
+    },
+    {
+      "key": "program_id",
+      "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "type": "string",
+      "description": "Sample program UUID"
+    },
+    {
+      "key": "application_id",
+      "value": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "type": "string",
+      "description": "Sample application UUID"
+    },
+    {
+      "key": "user_id",
+      "value": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "type": "string",
+      "description": "Sample user UUID"
+    },
+    {
+      "key": "approver_id",
+      "value": "d4e5f6a7-b8c9-0123-defa-234567890123",
+      "type": "string",
+      "description": "Sample approver UUID"
+    },
+    {
+      "key": "reviewer_id",
+      "value": "e5f6a7b8-c9d0-1234-efab-345678901234",
+      "type": "string",
+      "description": "Sample reviewer UUID"
+    },
+    {
+      "key": "compliance_officer_id",
+      "value": "f6a7b8c9-d0e1-2345-fabc-456789012345",
+      "type": "string",
+      "description": "Sample compliance officer UUID"
+    },
+    {
+      "key": "disbursement_id",
+      "value": "a7b8c9d0-e1f2-3456-abcd-567890123456",
+      "type": "string",
+      "description": "Sample disbursement UUID"
+    },
+    {
+      "key": "notification_id",
+      "value": "b8c9d0e1-f2a3-4567-bcde-678901234567",
+      "type": "string",
+      "description": "Sample notification UUID"
+    },
+    {
+      "key": "report_id",
+      "value": "c9d0e1f2-a3b4-5678-cdef-789012345678",
+      "type": "string",
+      "description": "Sample grant report UUID"
+    },
+    {
+      "key": "encrypted_payment_id",
+      "value": "enc_abc123xyz456",
+      "type": "string",
+      "description": "Encrypted payment ID returned by the Process Payment response"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Identity Service (Auth)",
+      "description": "Authentication and user management. All routes in this folder are PUBLIC — no token required.",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@cts.com\",\n  \"password\": \"P@ssw0rd1\",\n  \"role\": \"APPLICANT\",\n  \"phoneNumber\": \"9876543210\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Register a new user account. Role must be one of: ADMIN, FINANCE_OFFICER, APPLICANT, APPROVER, REVIEWER, COMPLIANCE_OFFICER. Password: 6-12 chars, must contain uppercase, lowercase, and a digit. Phone: exactly 10 digits."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const resp = pm.response.json();",
+                  "    if (resp.accessToken) {",
+                  "        pm.collectionVariables.set('token', resp.accessToken);",
+                  "        console.log('Access token saved to {{token}}');",
+                  "    }",
+                  "    if (resp.refreshToken) {",
+                  "        pm.collectionVariables.set('refresh_token', resp.refreshToken);",
+                  "        console.log('Refresh token saved to {{refresh_token}}');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@cts.com\",\n  \"password\": \"P@ssw0rd1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Authenticate a user and obtain JWT access and refresh tokens. The post-response script automatically saves the tokens to `{{token}}` and `{{refresh_token}}` collection variables. Access token TTL: 15 minutes. Refresh token TTL: 7 days."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@cts.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Invalidate the current user session. Adds the active token to the revocation blacklist."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const resp = pm.response.json();",
+                  "    if (resp.accessToken) {",
+                  "        pm.collectionVariables.set('token', resp.accessToken);",
+                  "        console.log('New access token saved to {{token}}');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            },
+            "description": "Exchange a valid refresh token for a new JWT access token. The post-response script saves the new access token to `{{token}}`."
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@cts.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "forgot-password"]
+            },
+            "description": "Initiate a password recovery flow. Sends a secure reset token to the registered email address. Response is intentionally generic to prevent user enumeration."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"a1b2c3d4-e5f6-7g8h-9i0j-k1l2m3n4o5p6\",\n  \"newPassword\": \"NewP@ssw0rd1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "reset-password"]
+            },
+            "description": "Complete the password reset using the token received by email. Password: 6-12 characters, must contain uppercase, lowercase, and a digit."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Program Service",
+      "description": "Grant program lifecycle management. Requires ADMIN or FINANCE_OFFICER role for write operations. All requests require a Bearer token.",
+      "item": [
+        {
+          "name": "Create Program",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rural Education Fund 2026\",\n  \"description\": \"A grant program to support rural schools with technology infrastructure and teacher training.\",\n  \"budget\": 500000.00,\n  \"startDate\": \"2026-05-01\",\n  \"endDate\": \"2027-04-30\",\n  \"eligibilityRules\": [\n    {\n      \"ruleDescription\": \"Applicant must be a registered educational institution\",\n      \"ruleExpression\": \"applicantType == 'EDUCATIONAL_INSTITUTION'\"\n    },\n    {\n      \"ruleDescription\": \"Annual budget must not exceed 1 million\",\n      \"ruleExpression\": \"annualBudget <= 1000000\"\n    }\n  ],\n  \"requiredDocuments\": [\n    {\n      \"documentName\": \"Registration Certificate\",\n      \"documentType\": \"PDF\"\n    },\n    {\n      \"documentName\": \"Proof of Address\",\n      \"documentType\": \"PDF\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", ""]
+            },
+            "description": "Create a new funding program with eligibility rules and required document definitions. Roles: ADMIN, FINANCE_OFFICER."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Programs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", ""]
+            },
+            "description": "Retrieve a list of all active funding programs."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Program by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "{{program_id}}"]
+            },
+            "description": "Retrieve a single program by its UUID. Update `{{program_id}}` in collection variables."
+          },
+          "response": []
+        },
+        {
+          "name": "Search Programs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/search?keyword=education",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "search"],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "education",
+                  "description": "Search term matched against program name and description"
+                }
+              ]
+            },
+            "description": "Full-text search for programs using a keyword. Matched against program name and description fields."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Program",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rural Education Fund 2026 (Updated)\",\n  \"description\": \"Updated description for the rural education grant program.\",\n  \"budget\": 600000.00,\n  \"startDate\": \"2026-05-01\",\n  \"endDate\": \"2027-06-30\",\n  \"eligibilityRules\": [\n    {\n      \"ruleDescription\": \"Applicant must be a registered educational institution\",\n      \"ruleExpression\": \"applicantType == 'EDUCATIONAL_INSTITUTION'\"\n    }\n  ],\n  \"requiredDocuments\": [\n    {\n      \"documentName\": \"Registration Certificate\",\n      \"documentType\": \"PDF\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "{{program_id}}"]
+            },
+            "description": "Full update of an existing program by ID. Replaces all fields. Roles: ADMIN, FINANCE_OFFICER."
+          },
+          "response": []
+        },
+        {
+          "name": "Archive Program",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "{{program_id}}"]
+            },
+            "description": "Archive (soft-delete) a program by ID. Marks the program as inactive without deleting it. Roles: ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Program Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/{{program_id}}/status?status=ACTIVE",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "{{program_id}}", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "description": "Target program status (e.g., ACTIVE, CLOSED, ARCHIVED, DRAFT)"
+                }
+              ]
+            },
+            "description": "Transition a program to a new lifecycle status. Valid values depend on the ProgramStatus enum (e.g., DRAFT, ACTIVE, CLOSED, ARCHIVED)."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Program",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "{{program_id}}"]
+            },
+            "description": "Permanently delete a program by ID. Roles: ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Eligibility Rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/{{program_id}}/rules",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "{{program_id}}", "rules"]
+            },
+            "description": "Retrieve all eligibility rules (SpEL expressions) configured for a specific program."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Program Requirements",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/{{program_id}}/requirements",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "{{program_id}}", "requirements"]
+            },
+            "description": "Retrieve the document requirements and eligibility criteria for a specific program."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Applications",
+      "description": "Grant application submission and lifecycle management. Roles: APPLICANT for submit/view own; ADMIN for all.",
+      "item": [
+        {
+          "name": "Submit Application",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"{{program_id}}\",\n  \"userId\": \"{{user_id}}\",\n  \"applicationData\": \"Our organization serves 3000 rural students in Rajasthan. We are a registered NGO with ISO certification. Annual budget: 800000. We seek funding to install computer labs in 5 village schools.\",\n  \"documents\": [\n    {\n      \"documentName\": \"Registration Certificate\",\n      \"documentType\": \"PDF\",\n      \"documentUrl\": \"https://storage.fundtrack.com/docs/reg-cert-001.pdf\"\n    },\n    {\n      \"documentName\": \"Proof of Address\",\n      \"documentType\": \"PDF\",\n      \"documentUrl\": \"https://storage.fundtrack.com/docs/address-001.pdf\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/submit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "submit"]
+            },
+            "description": "Submit a new grant application. The applicant's identity is derived from the JWT (`X-User-Id` is injected by the gateway — clients do not set it). The `applicationData` field is evaluated against the program's SpEL eligibility rules. Role: APPLICANT."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Application",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"{{program_id}}\",\n  \"userId\": \"{{user_id}}\",\n  \"applicationData\": \"Updated project description: Our organization now serves 4000 rural students. We have expanded to 3 districts. Annual budget: 850000.\",\n  \"documents\": [\n    {\n      \"documentName\": \"Registration Certificate\",\n      \"documentType\": \"PDF\",\n      \"documentUrl\": \"https://storage.fundtrack.com/docs/reg-cert-002.pdf\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/update/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "update", "{{application_id}}"]
+            },
+            "description": "Update an existing application before it progresses past the SUBMITTED state. Role: APPLICANT (own applications only)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Application Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/{{application_id}}/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "{{application_id}}", "summary"]
+            },
+            "description": "Retrieve full applicant details and application summary for a given application ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Application Documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/{{application_id}}/documents",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "{{application_id}}", "documents"]
+            },
+            "description": "Retrieve all documents attached to a specific application."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Validation Results",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/{{application_id}}/validation",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "{{application_id}}", "validation"]
+            },
+            "description": "Retrieve the SpEL eligibility rule evaluation results for a specific application."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Application",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "{{application_id}}"]
+            },
+            "description": "Permanently delete a draft or rejected application. Role: APPLICANT (own) or ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/my-applications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "my-applications"]
+            },
+            "description": "Retrieve all applications submitted by the currently authenticated user. The user ID is derived from the JWT (gateway-injected `X-User-Id`). Role: APPLICANT."
+          },
+          "response": []
+        },
+        {
+          "name": "Has Pending Reviews (by Program)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/pending-reviews/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "pending-reviews", "{{program_id}}"]
+            },
+            "description": "Check whether a program has any applications with a SUBMITTED (pending review) status. Returns a boolean."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Approved Applications (Winners)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/applications/programs/{{program_id}}/winners",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "applications", "programs", "{{program_id}}", "winners"]
+            },
+            "description": "Retrieve a list of application UUIDs that have been APPROVED for a given program. Used by the disbursement engine."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - Reviews",
+      "description": "Reviewer workflow for evaluating submitted applications. Role: REVIEWER.",
+      "item": [
+        {
+          "name": "Get Pending Applications (for Review)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reviews/pending",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reviews", "pending"]
+            },
+            "description": "Retrieve all applications in SUBMITTED status awaiting reviewer evaluation."
+          },
+          "response": []
+        },
+        {
+          "name": "Process Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{application_id}}\",\n  \"reviewerId\": \"{{reviewer_id}}\",\n  \"score\": 82,\n  \"comments\": \"The organization demonstrates strong community impact and solid financial management. Documentation is complete and meets all requirements. Minor concern about scalability plan.\",\n  \"recommendation\": {\n    \"verdict\": \"RECOMMENDED\",\n    \"justification\": \"All eligibility criteria met. High community need and credible implementation plan.\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reviews/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reviews", "process"]
+            },
+            "description": "Submit a review evaluation for a SUBMITTED application. Score range: 0–100. Recommendation verdict: RECOMMENDED or NOT_RECOMMENDED. Transitions the application to UNDER_REVIEW status."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Review",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{application_id}}\",\n  \"reviewerId\": \"{{reviewer_id}}\",\n  \"score\": 88,\n  \"comments\": \"Revised score after reviewing additional documentation. The scalability concern has been addressed.\",\n  \"recommendation\": {\n    \"verdict\": \"RECOMMENDED\",\n    \"justification\": \"All eligibility criteria met. Scalability plan is now satisfactory.\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reviews/update/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reviews", "update", "{{application_id}}"]
+            },
+            "description": "Partially update an existing review evaluation for an application. Role: REVIEWER."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Review",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reviews/delete-application/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reviews", "delete-application", "{{application_id}}"]
+            },
+            "description": "Remove a review record for a specific application. Role: REVIEWER or ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Reviews by Reviewer",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reviews/reviewer/{{reviewer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reviews", "reviewer", "{{reviewer_id}}"]
+            },
+            "description": "Retrieve the dashboard data for a specific reviewer, including all their review evaluations and aggregated statistics."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 - Decisions",
+      "description": "Approver workflow for rendering final approval or rejection decisions on reviewed applications. Role: APPROVER.",
+      "item": [
+        {
+          "name": "Get Under-Review Applications",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/decisions/pending/under-review",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "decisions", "pending", "under-review"]
+            },
+            "description": "Retrieve all applications currently in UNDER_REVIEW status that are awaiting a final approval decision."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Application Decision Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/decisions/application/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "decisions", "application", "{{application_id}}"]
+            },
+            "description": "Retrieve full decision details for a specific application, including reviewer scores and recommendation."
+          },
+          "response": []
+        },
+        {
+          "name": "Process Decision",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{application_id}}\",\n  \"approverId\": \"{{approver_id}}\",\n  \"decision\": \"APPROVED\",\n  \"notes\": \"Application demonstrates strong community impact, financial accountability, and meets all eligibility criteria. Approved for full grant amount.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/decisions/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "decisions", "process"]
+            },
+            "description": "Render a final verdict on an UNDER_REVIEW application. Decision values: APPROVED or REJECTED. Transitions the application to its final status and triggers downstream workflows (notifications, disbursement). Role: APPROVER."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Decisions by Approver",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/decisions/approver/{{approver_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "decisions", "approver", "{{approver_id}}"]
+            },
+            "description": "Retrieve the approver dashboard with all decisions rendered by a specific approver, including approval rate and statistics."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Decision",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{application_id}}\",\n  \"approverId\": \"{{approver_id}}\",\n  \"decision\": \"REJECTED\",\n  \"notes\": \"Decision revised after further review. Budget constraints prevent approval at this time.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/decisions/application/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "decisions", "application", "{{application_id}}"]
+            },
+            "description": "Update an existing decision for an application. Role: APPROVER or ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Decision",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/decisions/application/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "decisions", "application", "{{application_id}}"]
+            },
+            "description": "Delete a decision record for a specific application. Role: ADMIN."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06 - Disbursements",
+      "description": "Disbursement scheduling for approved applications. Role: FINANCE_OFFICER or ADMIN.",
+      "item": [
+        {
+          "name": "Get Disbursement Schedule by Application",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/disbursements/application/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "disbursements", "application", "{{application_id}}"]
+            },
+            "description": "Retrieve all scheduled disbursement installments for a specific approved application."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Remaining Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/disbursements/application/{{application_id}}/remaining-balance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "disbursements", "application", "{{application_id}}", "remaining-balance"]
+            },
+            "description": "Retrieve the outstanding grant balance remaining for an application after accounting for paid installments."
+          },
+          "response": []
+        },
+        {
+          "name": "Finalize Payment Schedule (Dynamic)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": \"{{program_id}}\",\n  \"frequency\": \"QUARTERLY\",\n  \"numberOfPayments\": 4\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/disbursements/finalize-payment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "disbursements", "finalize-payment"]
+            },
+            "description": "Create a dynamic disbursement schedule for all APPROVED applications in a program. Frequency values: MONTHLY, QUARTERLY, BI_ANNUALLY, ANNUALLY. Role: FINANCE_OFFICER or ADMIN."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07 - Payments",
+      "description": "Payment processing and receipt management. Role: FINANCE_OFFICER or ADMIN. Payment IDs are encrypted to prevent enumeration.",
+      "item": [
+        {
+          "name": "Process Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disbursementId\": \"{{disbursement_id}}\",\n  \"method\": \"BANK_TRANSFER\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "process"]
+            },
+            "description": "Execute a payment for a scheduled disbursement installment. Method values: BANK_TRANSFER, UPI, CHECK, NEFT. The response includes an `encryptedId` — save it to `{{encrypted_payment_id}}`. Role: FINANCE_OFFICER."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment by Encrypted ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/{{encrypted_payment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "{{encrypted_payment_id}}"]
+            },
+            "description": "Retrieve payment details using its encrypted ID (returned by the Process Payment endpoint). Encrypted IDs prevent sequential ID enumeration."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payments by Application",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/application/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "application", "{{application_id}}"]
+            },
+            "description": "Retrieve all payment records associated with a specific application."
+          },
+          "response": []
+        },
+        {
+          "name": "Download Payment Receipt (PDF)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Accept", "value": "application/pdf" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/payments/{{encrypted_payment_id}}/receipt",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "payments", "{{encrypted_payment_id}}", "receipt"]
+            },
+            "description": "Download a PDF payment receipt for a specific payment. Response Content-Type: application/pdf. In Postman, use 'Send and Download' to save the PDF file."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "08 - Grant Reports",
+      "description": "Post-disbursement progress reporting by grant recipients. Role: APPLICANT.",
+      "item": [
+        {
+          "name": "Submit Grant Report (Multipart)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "data",
+                  "value": "{\n  \"applicationId\": \"{{application_id}}\",\n  \"scope\": \"Successfully completed Phase 1 of the rural education project. Installed computer labs in 3 out of 5 target schools. Teacher training workshops conducted for 45 educators.\",\n  \"metrics\": \"Schools equipped: 3 of 5; Students impacted: 1200; Teachers trained: 45; Equipment installed: 90 computers\"\n}",
+                  "description": "JSON metadata part (application/json). Contains applicationId, scope, and metrics.",
+                  "type": "text",
+                  "contentType": "application/json"
+                },
+                {
+                  "key": "proof",
+                  "description": "Supporting evidence file (PDF, JPG, PNG). Select the proof document from your file system.",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/grant_report",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "grant_report"]
+            },
+            "description": "Submit a post-disbursement progress report as a multipart/form-data request. The `data` part is a JSON object (set Content-Type to application/json for that part). The `proof` part is a file attachment (PDF/image). Scope: 10–2000 characters. Role: APPLICANT."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Grant Reports",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/grant_reports/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "grant_reports", "{{application_id}}"]
+            },
+            "description": "Retrieve all grant progress reports submitted for a specific application."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "09 - Compliance",
+      "description": "Compliance officer audit workflow for verifying grant report submissions. Role: COMPLIANCE_OFFICER or ADMIN.",
+      "item": [
+        {
+          "name": "Record Compliance Audit",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"grantReportId\": \"{{report_id}}\",\n  \"complianceOfficerId\": \"{{compliance_officer_id}}\",\n  \"status\": \"COMPLIANCE\",\n  \"comments\": \"All financial records verified. Expenditure aligns with approved grant budget. Milestone completion evidence is satisfactory.\",\n  \"type\": \"FINANCIAL_VERIFICATION\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/audit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "audit"]
+            },
+            "description": "Record an audit verdict on a submitted grant report. Status values: COMPLIANCE or NON_COMPLIANT. Type example: FINANCIAL_VERIFICATION. Role: COMPLIANCE_OFFICER."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Compliance Dashboard (by Program)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/dashboard/program/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "dashboard", "program", "{{program_id}}"]
+            },
+            "description": "Retrieve a compliance dashboard showing the audit status of all applicants within a specific program."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Audit History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/history?complianceOfficerId={{compliance_officer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "history"],
+              "query": [
+                {
+                  "key": "complianceOfficerId",
+                  "value": "{{compliance_officer_id}}",
+                  "description": "UUID of the compliance officer whose audit history to retrieve"
+                }
+              ]
+            },
+            "description": "Retrieve the complete audit history for a specific compliance officer."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Non-Submitters (by Program)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/non-submitters/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "non-submitters", "{{program_id}}"]
+            },
+            "description": "Retrieve a list of approved applicants who have not yet submitted a grant progress report for a specific program."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Report Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/report/{{report_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "report", "{{report_id}}"]
+            },
+            "description": "Retrieve full details of a specific grant report, including proof document reference and scope/metrics content."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Grant Report Status (Compliance Check)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/compliance/compliance-check/{{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "compliance", "compliance-check", "{{application_id}}"]
+            },
+            "description": "Check whether a grant report has been submitted for a specific application. Returns a boolean indicating submission status."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "10 - Analytics",
+      "description": "Stateless reporting and analytics aggregations. Role: ADMIN only (enforced at API Gateway).",
+      "item": [
+        {
+          "name": "Get Status Distribution",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics/status-distribution/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analytics", "status-distribution", "{{program_id}}"]
+            },
+            "description": "Retrieve the count of applications grouped by status (SUBMITTED, UNDER_REVIEW, APPROVED, REJECTED) for a given program. Role: ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Analysis",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics/daily-analysis/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analytics", "daily-analysis", "{{program_id}}"]
+            },
+            "description": "Retrieve day-by-day application submission trend data for a program. Useful for volume and velocity reporting. Role: ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Finance Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics/finance-summary/{{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analytics", "finance-summary", "{{program_id}}"]
+            },
+            "description": "Retrieve financial aggregates for a program: total budget, amount disbursed, amount pending, and remaining balance. Role: ADMIN."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "11 - Notifications",
+      "description": "User notification management. Internal service-triggered notifications (POST /send) are excluded from client use.",
+      "item": [
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"applicationId\": \"{{application_id}}\",\n  \"message\": \"Your application has been received and is under review. You will be notified of the outcome within 10 business days.\",\n  \"category\": \"SUBMISSION\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", ""]
+            },
+            "description": "Create a templated notification for a user. The `category` field selects a notification template (e.g., SUBMISSION, APPROVAL, REJECTION, DISBURSED, WELCOME). If `message` is provided, it overrides the template. Role: ADMIN or internal services."
+          },
+          "response": []
+        },
+        {
+          "name": "Send Simple Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"message\": \"System maintenance scheduled for Sunday 2026-04-26 at 02:00 UTC. Services will be unavailable for approximately 2 hours.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/simple",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "simple"]
+            },
+            "description": "Send a one-off, non-templated plain-text notification to a user. Message content is used verbatim. Suitable for administrative announcements. Role: ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Notifications by User",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/user/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "user", "{{user_id}}"]
+            },
+            "description": "Retrieve all notifications for a specific user, ordered by creation time descending."
+          },
+          "response": []
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/{{notification_id}}/read",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "{{notification_id}}", "read"]
+            },
+            "description": "Mark a specific notification as read. Updates the notification's read status. Role: owner user or ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Notification",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"applicationId\": \"{{application_id}}\",\n  \"message\": \"Updated notification message with revised information.\",\n  \"category\": \"APPROVAL\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/{{notification_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "{{notification_id}}"]
+            },
+            "description": "Replace a notification record with updated content. Role: ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/{{notification_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "{{notification_id}}"]
+            },
+            "description": "Permanently delete a notification by ID. Role: ADMIN."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -190,4 +190,36 @@ public class ApplicationController {
             @RequestHeader("X-User-Id") UUID applicantId) {
         return ResponseEntity.ok(applicationService.getMyApplications(applicantId));
     }
+
+
+    @GetMapping("/pending-reviews/{programId}")
+//    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER','FINANCE_OFFICER')")
+    public ResponseEntity<Boolean> hasPendingReviews(@PathVariable UUID programId) {
+        return ResponseEntity.ok(applicationService.hasPendingReviews(programId));
+    }
+
+    @GetMapping("/programs/{programId}/winners")
+    public ResponseEntity<List<UUID>> getApprovedApplicationIds(@PathVariable UUID programId) {
+        return ResponseEntity.ok(applicationService.getApprovedApplicationIds(programId));
+    }
+
+    @GetMapping("/programs/{programId}/approved")
+    public ResponseEntity<List<ApplicationResponseDTO>> getApprovedApplications(
+            @PathVariable UUID programId) {
+        return ResponseEntity.ok(applicationService.getApprovedApplications(programId));
+    }
+
+    @GetMapping("/programs/{programId}/accepted")
+    public ResponseEntity<List<ApplicationResponseDTO>> getAcceptedApplications(
+            @PathVariable UUID programId) {
+        return ResponseEntity.ok(applicationService.getAcceptedApplications(programId));
+    }
+
+    @PutMapping("/internal/{id}/status/{newStatus}")
+    public ResponseEntity<Void> updateApplicationStatus(
+            @PathVariable UUID id,
+            @PathVariable String newStatus) {
+        applicationService.updateApplicationStatus(id, newStatus);
+        return ResponseEntity.ok().build();
+    }
 }

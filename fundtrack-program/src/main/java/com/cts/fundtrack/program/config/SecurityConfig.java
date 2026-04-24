@@ -86,6 +86,8 @@ public class SecurityConfig {
                 // Allow internal health checks and documentation without auth
                 .requestMatchers("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                 // All other endpoints (Applications, Reviews, Decisions) require valid headers
+                    .requestMatchers("/api/internal/**").permitAll()
+                    .requestMatchers("/api/v1/programs/*").permitAll()
                 .anyRequest().authenticated()
             )
 

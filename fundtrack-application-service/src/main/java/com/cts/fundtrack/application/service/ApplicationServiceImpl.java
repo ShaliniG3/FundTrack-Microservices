@@ -271,7 +271,13 @@ public class ApplicationServiceImpl implements ApplicationService {
             for (String pair : pairs) {
                 String[] keyValue = pair.split("=");
                 if (keyValue.length == 2) {
-                    variables.put(keyValue[0].trim().toLowerCase(), keyValue[1].trim());
+                    String key = keyValue[0].trim().toLowerCase();
+                    String rawValue = keyValue[1].trim();
+                    try {
+                        variables.put(key, Double.parseDouble(rawValue));
+                    } catch (NumberFormatException e) {
+                        variables.put(key, rawValue);
+                    }
                 }
             }
 
@@ -371,5 +377,44 @@ public class ApplicationServiceImpl implements ApplicationService {
         } catch (Exception e) {
             log.error("Communication Failure with Notification Service: {}", e.getMessage());
         }
+    }
+
+    @Override
+    public Boolean hasPendingReviews(UUID programId) {
+        return applicationRepo.existsByProgramIdAndStatusNotIn(
+                programId,
+                List.of(ApplicationStatus.APPROVED, ApplicationStatus.REJECTED , ApplicationStatus.ACCEPTED)
+        );
+    }
+
+    @Override
+    public List<UUID> getApprovedApplicationIds(UUID programId) {
+        return applicationRepo.findAllByProgramIdAndStatus(programId, ApplicationStatus.APPROVED)
+                .stream()
+                .map(Application::getApplicationId)
+                .collect(Collectors.toList());
+    }
+
+    public List<ApplicationResponseDTO> getApprovedApplications(UUID programId) {
+        return applicationRepo
+                .findAllByProgramIdAndStatus(programId, ApplicationStatus.APPROVED)
+                .stream()
+                .map(applicationMapper::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<ApplicationResponseDTO> getAcceptedApplications(UUID programId) {
+        return applicationRepo
+                .findAllByProgramIdAndStatus(programId, ApplicationStatus.ACCEPTED)
+                .stream()
+                .map(applicationMapper::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void updateApplicationStatus(UUID applicationId, String newStatus) {
+        Application app = fetchApplication(applicationId);
+        app.setStatus(ApplicationStatus.valueOf(newStatus));
+        applicationRepo.save(app);
     }
 }

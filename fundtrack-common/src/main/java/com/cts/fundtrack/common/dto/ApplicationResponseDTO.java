@@ -7,8 +7,10 @@ import java.util.UUID;
 import com.cts.fundtrack.common.models.enums.ApplicationStatus;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * Data Transfer Object representing a comprehensive view of a fund application.
@@ -20,6 +22,8 @@ import lombok.Data;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Schema(description = "Detailed response object containing full application state and associated metadata")
 public class ApplicationResponseDTO {
 

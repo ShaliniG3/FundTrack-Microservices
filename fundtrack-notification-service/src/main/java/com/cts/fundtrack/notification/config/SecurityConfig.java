@@ -62,10 +62,12 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                .anyRequest().authenticated()
-            )
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        .requestMatchers("/api/v1/notifications/send").permitAll()
+                        .requestMatchers("/api/v1/notifications/simple").permitAll() // ← add this
+                        .anyRequest().authenticated()
+                )
             // Add your filter before the standard Spring Security filters
             .addFilterBefore(gatewayHeaderFilter, UsernamePasswordAuthenticationFilter.class);
 

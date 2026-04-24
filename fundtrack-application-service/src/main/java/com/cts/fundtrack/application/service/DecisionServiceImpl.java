@@ -252,6 +252,14 @@ public class DecisionServiceImpl implements DecisionService {
             doc.setVerificationStatus(docStatus);
             documentRepository.save(doc);
         }
+
+        NotificationCategory workflowCat = ApplicationStatus.APPROVED.equals(newStatus)
+                ? NotificationCategory.APPROVAL
+                : NotificationCategory.REJECTED;
+
+        sendInternalNotification(app.getApplicantId(), applicationId,
+            "Important Update: The decision on your application has been revised. New outcome: " + newStatus,
+            workflowCat);
     }
 
     @Override

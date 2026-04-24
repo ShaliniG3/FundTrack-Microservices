@@ -76,8 +76,13 @@ public class SecurityConfig {
             
             // 3. Define the rules for the application routes
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
-                .anyRequest().authenticated()
+                    .requestMatchers("/api/v1/applications/programs/*/winners").permitAll()
+                    .requestMatchers("/api/v1/applications/pending-reviews/**").permitAll()
+                    .requestMatchers("/api/internal/**").permitAll()
+                    .requestMatchers("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                    .requestMatchers("/api/v1/applications/programs/*/approved").permitAll()
+                    .requestMatchers("/api/v1/applications/programs/*/accepted").permitAll()
+                    .anyRequest().authenticated()
             )
             
             // 4. Inject the filter that reads headers from the API Gateway

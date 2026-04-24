@@ -50,4 +50,8 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
      *         empty if the applicant has no applications on record
      */
     List<Application> findAllByApplicantId(UUID applicantId);
+
+    boolean existsByProgramIdAndStatusNotIn(UUID programId, List<ApplicationStatus> statuses);
+
+    List<Application> findAllByProgramIdAndStatus(UUID programId, ApplicationStatus status);
 }

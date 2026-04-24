@@ -23,5 +23,7 @@ public enum ApplicationStatus {
     APPROVED,
 
     /** The application has been rejected by an Approver; no funding will be disbursed. */
-    REJECTED
+    REJECTED,
+
+    ACCEPTED
 }

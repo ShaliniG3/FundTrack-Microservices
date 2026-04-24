@@ -12,15 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 import com.cts.fundtrack.common.aspect.Auditable;
 import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.EligibilityRuleDTO;
-import com.cts.fundtrack.common.dto.NotificationRequestDTO;
 import com.cts.fundtrack.common.dto.ProgramRequestDTO;
+import com.cts.fundtrack.common.dto.SimpleNotificationRequestDTO;
 import com.cts.fundtrack.common.dto.ProgramRequirementsDTO;
 import com.cts.fundtrack.common.dto.ProgramResponseDTO;
 import com.cts.fundtrack.common.exceptions.InvalidProgramStateException;
 import com.cts.fundtrack.common.exceptions.ProgramNotFoundException;
 import com.cts.fundtrack.common.models.enums.ActionType;
 import com.cts.fundtrack.common.models.enums.EntityType;
-import com.cts.fundtrack.common.models.enums.NotificationCategory;
 import com.cts.fundtrack.common.models.enums.ProgramStatus;
 import com.cts.fundtrack.program.mapper.ProgramMapper;
 import com.cts.fundtrack.program.models.Program;
@@ -117,7 +116,7 @@ public class ProgramServiceImpl implements ProgramService {
 
         Program savedProgram = programRepository.save(program);
 
-        sendInternalNotification(null, "Confirmation: You have successfully created the program '" + savedProgram.getName() + "'.", NotificationCategory.GENERAL);
+        sendSimpleNotification("Confirmation: You have successfully created the program '" + savedProgram.getName() + "'.");
 
         return programMapper.toResponseDTO(savedProgram);
     }
@@ -188,7 +187,7 @@ public class ProgramServiceImpl implements ProgramService {
         validateDates(dto);
         Program saved = programRepository.save(existingProgram);
 
-        sendInternalNotification(programId, "Success: Program '" + saved.getName() + "' has been updated.", NotificationCategory.GENERAL);
+        sendSimpleNotification("Success: Program '" + saved.getName() + "' has been updated.");
 
         return programMapper.toResponseDTO(saved);
     }
@@ -209,7 +208,7 @@ public class ProgramServiceImpl implements ProgramService {
         program.setStatus(ProgramStatus.ARCHIVED);
         programRepository.save(program);
 
-        sendInternalNotification(programId, "System Alert: Program '" + program.getName() + "' is now ARCHIVED.", NotificationCategory.GENERAL);
+        sendSimpleNotification("System Alert: Program '" + program.getName() + "' is now ARCHIVED.");
     }
 
     /**
@@ -228,7 +227,7 @@ public class ProgramServiceImpl implements ProgramService {
                 .orElseThrow(() -> new ProgramNotFoundException("Cannot delete. Program not found."));
         programRepository.deleteById(programId);
 
-        sendInternalNotification(null, "Security Confirmation: Program '" + program.getName() + "' was permanently deleted.", NotificationCategory.GENERAL);
+        sendSimpleNotification("Security Confirmation: Program '" + program.getName() + "' was permanently deleted.");
     }
 
     /**
@@ -256,7 +255,7 @@ public class ProgramServiceImpl implements ProgramService {
         program.setStatus(status);
         Program saved = programRepository.save(program);
 
-        sendInternalNotification(programId, "Workflow Update: Status for '" + saved.getName() + "' is now " + status, NotificationCategory.APPLICATION);
+        sendSimpleNotification("Workflow Update: Status for '" + saved.getName() + "' is now " + status + ".");
 
         return programMapper.toResponseDTO(saved);
     }
@@ -353,7 +352,7 @@ public class ProgramServiceImpl implements ProgramService {
      * @param message  the human-readable notification message to deliver.
      * @param category the {@link NotificationCategory} classifying the notification type.
      */
-    private void sendInternalNotification(UUID appId, String message, NotificationCategory category) {
+    private void sendSimpleNotification(String message) {
         UUID currentLoggedInUser = getCurrentUserId();
 
         if (currentLoggedInUser == null) {
@@ -362,14 +361,11 @@ public class ProgramServiceImpl implements ProgramService {
         }
 
         try {
-            NotificationRequestDTO notification = NotificationRequestDTO.builder()
-                    .userId(currentLoggedInUser)
-                    .applicationId(appId)
-                    .message(message)
-                    .category(category)
-                    .build();
-            notificationClient.sendNotification(notification);
-            log.debug("Transactional confirmation sent to user: {}", currentLoggedInUser);
+            SimpleNotificationRequestDTO notification = new SimpleNotificationRequestDTO();
+            notification.setUserId(currentLoggedInUser);
+            notification.setMessage(message);
+            notificationClient.sendSimpleNotification(notification);
+            log.debug("Notification sent to user: {}", currentLoggedInUser);
         } catch (Exception e) {
             log.error("Feign Error: Unable to reach Notification Service for user {}. Error: {}", currentLoggedInUser, e.getMessage());
         }

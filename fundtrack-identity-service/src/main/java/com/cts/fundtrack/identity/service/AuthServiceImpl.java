@@ -1,6 +1,7 @@
 package com.cts.fundtrack.identity.service;
 
 import com.cts.fundtrack.common.aspect.Auditable;
+import com.cts.fundtrack.common.client.NotificationClient;
 import com.cts.fundtrack.common.dto.*;
 import com.cts.fundtrack.common.models.enums.ActionType;
 import com.cts.fundtrack.common.models.enums.EntityType;
@@ -63,6 +64,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final Map<String, String> resetTokens = new HashMap<>();
     private final RefreshTokenService refreshTokenService;
+    private final NotificationClient notificationClient;
 
     /** Reusable message for user-not-found exceptions, extracted to avoid duplication (S1192). */
     private static final String USER_NOT_FOUND_MSG = "User not found";
@@ -112,6 +114,10 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         User savedUser = userRepository.saveAndFlush(user);
+
+        sendSimpleNotification(savedUser.getUserId(),
+            "Welcome to FundTrack, " + savedUser.getName() + "! Your account has been successfully created.");
+
         return RegisterResponseDTO.builder()
                 .userId(savedUser.getUserId())
                 .name(savedUser.getName())
@@ -166,6 +172,9 @@ public class AuthServiceImpl implements AuthService {
         user.setStatus(LoginStatus.LOGGED_IN);
         userRepository.save(user);
 
+        sendSimpleNotification(user.getUserId(),
+            "Login successful. Welcome back, " + user.getName() + "! You are now signed in to FundTrack.");
+
         return LoginResponseDTO.builder()
                 .userId(user.getUserId())
                 .accessToken(accessToken)
@@ -196,6 +205,9 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenService.deleteByUser(user);
         user.setStatus(LoginStatus.LOGGED_OUT);
         userRepository.save(user);
+
+        sendSimpleNotification(user.getUserId(),
+            "You have been successfully logged out of FundTrack. See you next time!");
 
         return LogoutResponseDTO.builder().email(user.getEmail()).userId(user.getUserId()).build();
     }
@@ -255,6 +267,21 @@ public class AuthServiceImpl implements AuthService {
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
         resetTokens.remove(token);
+
+        sendSimpleNotification(user.getUserId(),
+            "Security Alert: Your FundTrack password has been successfully reset. If you did not request this, contact support immediately.");
+
         return user.getUserId();
+    }
+
+    private void sendSimpleNotification(java.util.UUID userId, String message) {
+        try {
+            SimpleNotificationRequestDTO notification = new SimpleNotificationRequestDTO();
+            notification.setUserId(userId);
+            notification.setMessage(message);
+            notificationClient.sendSimpleNotification(notification);
+        } catch (Exception e) {
+            log.error("Failed to send notification to user {}: {}", userId, e.getMessage());
+        }
     }
 }

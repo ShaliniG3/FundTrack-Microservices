@@ -15,6 +15,7 @@ import com.cts.fundtrack.common.dto.DisbursementResponseDTO;
 import com.cts.fundtrack.common.dto.NotificationRequestDTO;
 import com.cts.fundtrack.common.dto.ProgramMetadataDTO;
 import com.cts.fundtrack.common.exceptions.InvalidProgramStateException;
+import com.cts.fundtrack.common.exceptions.ServiceUnavailableException;
 import com.cts.fundtrack.common.models.enums.ActionType;
 import com.cts.fundtrack.common.models.enums.DisbursementStatus;
 import com.cts.fundtrack.common.models.enums.EntityType;
@@ -85,13 +86,56 @@ public class DisbursementServiceImpl implements DisbursementService {
                 .sum();
     }
 
+    /**
+     * Orchestrates the full budget-splitting and disbursement-scheduling workflow for a
+     * closed grant program.
+     *
+     * <p>Pre-conditions enforced before any financial records are created:
+     * <ol>
+     *   <li>The Program Service must be reachable — if the circuit breaker is open,
+     *       a {@link ServiceUnavailableException} is thrown and the operation is aborted
+     *       with a {@code 503} response. The program's persisted status is never read
+     *       from a fallback stub, preventing the previous
+     *       {@code "Budget Split Blocked: SERVICE_UNAVAILABLE"} error.</li>
+     *   <li>The program must be in {@code CLOSED} status — enforced against the real
+     *       status returned by the Program Service.</li>
+     *   <li>All submitted applications must have been reviewed — no pending evaluations
+     *       may remain.</li>
+     *   <li>At least one application must have been approved.</li>
+     * </ol>
+     * </p>
+     *
+     * <p>For each approved application that does not already have a disbursement schedule,
+     * the total budget is divided equally among all winners and an installment plan is
+     * generated at the requested {@code frequency} and {@code numberOfPayments}.</p>
+     *
+     * @param programId        the UUID of the grant program to finalize
+     * @param frequency        the payout cadence ({@code MONTHLY}, {@code QUARTERLY},
+     *                         {@code HALF_YEARLY}, or {@code YEARLY})
+     * @param numberOfPayments the total number of installments per approved applicant
+     * @return the list of newly created {@link DisbursementResponseDTO} records;
+     *         empty if no approved applications exist
+     * @throws ServiceUnavailableException   if the Program Service is currently unreachable
+     * @throws InvalidProgramStateException  if the program is not {@code CLOSED} or if
+     *                                       pending application reviews remain
+     */
     @Override
     @Transactional
     @Auditable(action = ActionType.CREATE, entityName = EntityType.DISBURSEMENT)
     public List<DisbursementResponseDTO> finalizeAndSplitBudget(UUID programId, PaymentFrequency frequency, int numberOfPayments) {
         log.info("Financial Finalization Triggered | Program: {} | Interval: {}", programId, frequency);
 
-        ProgramMetadataDTO program = programClient.getProgramById(programId);
+        ProgramMetadataDTO program;
+        try {
+            program = programClient.getProgramById(programId);
+        } catch (ServiceUnavailableException e) {
+            // Program Service is down — abort cleanly without touching any state.
+            // The program's real status in the DB is unaffected; the operation can
+            // be retried once the service recovers.
+            log.warn("Budget Split Deferred: Program Service unavailable for programId={}", programId);
+            throw e; // propagates to global exception handler → 503 to client
+        }
+
         if (!"CLOSED".equalsIgnoreCase(program.getStatus())) {
             log.error("Budget Split Blocked: Program {} is currently in status {}", programId, program.getStatus());
             throw new InvalidProgramStateException("Budget Split Rejected: Program must be in CLOSED status.");
@@ -121,11 +165,18 @@ public class DisbursementServiceImpl implements DisbursementService {
 
                 applicationClient.updateApplicationStatus(appId, "ACCEPTED");
 
-                // Transactional Confirmation: Target the currently logged-in Admin/Staff
-                sendInternalNotification(appId,
-                    String.format("System Confirmation: Budget split complete for Program '%s'. Installment plan created for Application %s.",
-                    program.getName(), appId),
-                    NotificationCategory.ACCEPTED);
+                // Notify the applicant that their funds have been scheduled
+                UUID applicantUserId = applicationClient.getApplicationMetadata(appId).getApplicantUserId();
+                sendInternalNotification(applicantUserId, appId,
+                        String.format("Congratulations! Your grant application for Program '%s' has been accepted. Your installment plan is now active.",
+                                program.getName()),
+                        NotificationCategory.ACCEPTED);
+
+                // Confirm the operation to the logged-in finance officer
+                sendInternalNotification(getCurrentUserId(), appId,
+                        String.format("System Confirmation: Budget split complete for Program '%s'. Installment plan created for Application %s.",
+                                program.getName(), appId),
+                        NotificationCategory.DISBURSEMENT);
             }
         }
 
@@ -200,26 +251,24 @@ public class DisbursementServiceImpl implements DisbursementService {
      * @param message  the human-readable notification message body
      * @param category the {@link NotificationCategory} used to classify the alert in the UI
      */
-    private void sendInternalNotification(UUID appId, String message, NotificationCategory category) {
-        UUID currentLoggedInUser = getCurrentUserId();
-
-        if (currentLoggedInUser == null) {
+    private void sendInternalNotification(UUID userId, UUID appId, String message, NotificationCategory category) {
+        if (userId == null) {
             log.warn("Notification skipped: No authenticated user ID found in request headers.");
             return;
         }
 
         try {
             NotificationRequestDTO notification = NotificationRequestDTO.builder()
-                    .userId(currentLoggedInUser)
+                    .userId(userId)
                     .applicationId(appId)
                     .message(message)
                     .category(category)
                     .build();
             notificationClient.sendNotification(notification);
-            log.debug("Transactional confirmation dispatched to user: {}", currentLoggedInUser);
+            log.debug("Notification dispatched to user: {}", userId);
         } catch (Exception e) {
             log.error("Internal Notification Error: Unable to reach Notification Service for user {}. Reason: {}",
-                      currentLoggedInUser, e.getMessage());
+                    userId, e.getMessage());
         }
     }
 }

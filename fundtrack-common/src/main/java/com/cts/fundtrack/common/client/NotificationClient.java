@@ -4,6 +4,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import com.cts.fundtrack.common.dto.NotificationRequestDTO;
+import com.cts.fundtrack.common.dto.SimpleNotificationRequestDTO;
 import com.cts.fundtrack.common.config.FeignConfig;
 
 /**
@@ -33,6 +34,9 @@ public interface NotificationClient {
      * @param request the {@link NotificationRequestDTO} containing the recipient,
      *                message content, and notification category
      */
-    @PostMapping("/api/v1/internal/notifications/send")
+    @PostMapping("/api/v1/notifications/send")
     void sendNotification(@RequestBody NotificationRequestDTO request);
+
+    @PostMapping("/api/v1/notifications/simple")
+    void sendSimpleNotification(@RequestBody SimpleNotificationRequestDTO request);
 }

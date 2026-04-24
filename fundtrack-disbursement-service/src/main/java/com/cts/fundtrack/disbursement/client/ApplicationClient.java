@@ -47,7 +47,7 @@ public interface ApplicationClient {
      * @param programId the UUID of the grant program
      * @return a list of approved application UUIDs; returns an empty list on fallback
      */
-    @GetMapping("/api/internal/programs/{programId}/winners")
+    @GetMapping("/api/v1/applications/programs/{programId}/winners")
     List<UUID> getApprovedApplicationIds(@PathVariable("programId") UUID programId);
 
     /**
@@ -62,7 +62,7 @@ public interface ApplicationClient {
      * @return {@code true} if at least one application is still pending review;
      *         {@code false} if all reviews are complete; {@code true} on fallback
      */
-    @GetMapping("/api/internal/programs/{programId}/has-pending")
+    @GetMapping("/api/v1/applications/pending-reviews/{programId}")
     Boolean hasPendingReviews(@PathVariable("programId") UUID programId);
 
     /**
@@ -75,6 +75,7 @@ public interface ApplicationClient {
      * @param id        the UUID of the application to update
      * @param newStatus the target status string (e.g., {@code "ACCEPTED"})
      */
-    @PutMapping("/api/internal/applications/{id}/status/{newStatus}")
+//    @PutMapping("/api/internal/applications/{id}/status/{newStatus}")
+    @PutMapping("/api/v1/applications/internal/{id}/status/{newStatus}")
     void updateApplicationStatus(@PathVariable("id") UUID id, @PathVariable("newStatus") String newStatus);
 }

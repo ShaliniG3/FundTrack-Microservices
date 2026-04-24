@@ -188,10 +188,13 @@ public class ComplianceServiceImpl implements ComplianceService {
             List<GrantReport> reports = grantReportRepository.findByApplicationIdOrderBySubmittedDateDesc(appId);
             String complianceStatus = resolveStatus(reports, paidInstallments);
 
+            UUID latestReportId = reports.isEmpty() ? null : reports.get(0).getGrantReportId();
+
             return ApplicantComplianceDTO.builder()
                     .applicationId(appId)
                     .latestReportStatus(complianceStatus)
                     .currentInstallment((int) paidInstallments)
+                    .reportId(latestReportId)
                     .build();
         }).toList();
     }

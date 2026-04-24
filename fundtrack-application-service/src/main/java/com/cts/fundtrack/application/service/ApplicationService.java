@@ -125,4 +125,15 @@ public interface ApplicationService {
      *         applicant has no applications on record
      */
     List<ApplicationResponseDTO> getMyApplications(UUID applicantId);
+
+
+    Boolean hasPendingReviews(UUID programId);
+
+    List<UUID> getApprovedApplicationIds(UUID programId);
+
+    List<ApplicationResponseDTO> getApprovedApplications(UUID programId);
+
+    List<ApplicationResponseDTO> getAcceptedApplications(UUID programId);
+
+    void updateApplicationStatus(UUID applicationId, String newStatus);
 }

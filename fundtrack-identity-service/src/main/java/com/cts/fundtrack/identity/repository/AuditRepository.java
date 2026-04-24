@@ -1,9 +1,11 @@
 package com.cts.fundtrack.identity.repository;
 
+import com.cts.fundtrack.common.models.enums.ActionType;
 import com.cts.fundtrack.identity.model.AuditLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -28,4 +30,8 @@ import java.util.UUID;
  */
 @Repository
 public interface AuditRepository extends JpaRepository<AuditLog, UUID> {
+
+    List<AuditLog> findByAction(ActionType action);
+    List<AuditLog> findByEntityId(UUID entityId);
+    List<AuditLog> findByUserUserId(UUID userId);
 }

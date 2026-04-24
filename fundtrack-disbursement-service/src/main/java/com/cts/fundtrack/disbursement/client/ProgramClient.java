@@ -40,6 +40,6 @@ public interface ProgramClient {
      *         returns a stub with {@code status = "SERVICE_UNAVAILABLE"} and
      *         {@code budget = -1.0} on fallback
      */
-    @GetMapping("/api/internal/programs/{id}")
+    @GetMapping("/api/v1/programs/{id}")
     ProgramMetadataDTO getProgramById(@PathVariable("id") UUID id);
 }

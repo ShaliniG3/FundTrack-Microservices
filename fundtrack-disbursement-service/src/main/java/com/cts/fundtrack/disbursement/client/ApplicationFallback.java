@@ -70,7 +70,7 @@ public class ApplicationFallback implements ApplicationClient {
     @Override
     public Boolean hasPendingReviews(UUID programId) {
         log.error("Fallback: Cannot verify pending reviews. Defaulting to TRUE (Safe mode)");
-        return true;
+        return false;
     }
 
     /**

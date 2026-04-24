@@ -44,18 +44,18 @@ public class FeignConfig {
     public RequestInterceptor requestInterceptor() {
         return requestTemplate -> {
             ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-            
+
             if (attributes != null) {
                 HttpServletRequest request = attributes.getRequest();
-                
-                // Pull the headers from the Gateway-to-Application call
+
+                String authorization = request.getHeader("Authorization"); // ← added
                 String userId = request.getHeader("X-User-Id");
-                String userRole = request.getHeader("X-User-Role");
+                String userRole = request.getHeader("X-User-Roles");
                 String userEmail = request.getHeader("X-User-Email");
 
-                // "Stamp" them onto the Application-to-Program call
+                if (authorization != null) requestTemplate.header("Authorization", authorization); // ← added
                 if (userId != null) requestTemplate.header("X-User-Id", userId);
-                if (userRole != null) requestTemplate.header("X-User-Role", userRole);
+                if (userRole != null) requestTemplate.header("X-User-Roles", userRole);
                 if (userEmail != null) requestTemplate.header("X-User-Email", userEmail);
             }
         };

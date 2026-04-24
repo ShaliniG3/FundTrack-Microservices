@@ -210,7 +210,7 @@ public class NotificationController {
             summary = "Internal Send Notification",
             description = "Endpoint specifically for other microservices to trigger notifications via Feign Client."
     )
-    public void receiveInternalNotification(@Valid @RequestBody NotificationRequestDTO request) {
+    public void sendInternalNotification(@Valid @RequestBody NotificationRequestDTO request) {
         log.info("Internal Request Received | User: {} | Category: {}",
                  request.getUserId(), request.getCategory());
         // Directing the logic to the service layer
