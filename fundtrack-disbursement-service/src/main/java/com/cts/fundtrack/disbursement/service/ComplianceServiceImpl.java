@@ -161,14 +161,34 @@ public class ComplianceServiceImpl implements ComplianceService {
 
         return applicationIds.stream()
                 .filter(appId -> {
-                    long paidCount = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
+                    long paidCount   = disbursementRepository.countByApplicationIdAndStatus(appId, DisbursementStatus.PAID);
                     long reportCount = grantReportRepository.countByApplicationId(appId);
                     return paidCount > reportCount;
                 })
-                .map(appId -> ApplicantComplianceDTO.builder()
-                        .applicationId(appId)
-                        .latestReportStatus("DELINQUENT_SUBMISSION_REQUIRED")
-                        .build())
+                .map(appId -> {
+                    // ── resolve name + program via Application Service ──
+                    String applicantName = "Unknown";
+                    String programName   = "";
+                    String appStatus     = "";
+                    try {
+                        ApplicationMetadataDTO meta = applicationClient.getApplicationMetadata(appId);
+                        if (meta != null) {
+                            applicantName = meta.getApplicantName() != null ? meta.getApplicantName() : "Unknown";
+                            programName   = meta.getProgramName()   != null ? meta.getProgramName()   : "";
+                            appStatus     = meta.getStatus()        != null ? meta.getStatus()         : "";
+                        }
+                    } catch (Exception e) {
+                        log.warn("Could not fetch metadata for application {}: {}", appId, e.getMessage());
+                    }
+
+                    return ApplicantComplianceDTO.builder()
+                            .applicationId(appId)
+                            .applicantName(applicantName)
+                            .programName(programName)
+                            .applicationStatus(appStatus)
+                            .latestReportStatus("DELINQUENT_SUBMISSION_REQUIRED")
+                            .build();
+                })
                 .toList();
     }
 

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.cts.fundtrack.common.dto.*;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
@@ -24,15 +25,6 @@ import com.cts.fundtrack.application.repository.ApplicationValidationRepository;
 import com.cts.fundtrack.application.repository.DocumentRepository;
 import com.cts.fundtrack.common.aspect.Auditable;
 import com.cts.fundtrack.common.client.NotificationClient;
-import com.cts.fundtrack.common.dto.ApplicantDetailsDTO;
-import com.cts.fundtrack.common.dto.ApplicationRequestDTO;
-import com.cts.fundtrack.common.dto.ApplicationResponseDTO;
-import com.cts.fundtrack.common.dto.ApplicationUpdateDTO;
-import com.cts.fundtrack.common.dto.DocumentDTO;
-import com.cts.fundtrack.common.dto.EligibilityRuleDTO;
-import com.cts.fundtrack.common.dto.NotificationRequestDTO;
-import com.cts.fundtrack.common.dto.ProgramRequirementsDTO;
-import com.cts.fundtrack.common.dto.ValidationResultDTO;
 import com.cts.fundtrack.common.exceptions.ApplicationNotFoundException;
 import com.cts.fundtrack.common.exceptions.DuplicateApplicationException;
 import com.cts.fundtrack.common.exceptions.InvalidApplicationStateException;
@@ -42,7 +34,8 @@ import com.cts.fundtrack.common.models.enums.ApplicationStatus;
 import com.cts.fundtrack.common.models.enums.EntityType;
 import com.cts.fundtrack.common.models.enums.NotificationCategory;
 import com.cts.fundtrack.common.models.enums.VerificationStatus;
-
+import com.cts.fundtrack.application.client.IdentityServiceClient;
+import com.cts.fundtrack.common.dto.UserMetadataDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,7 +71,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ProgramServiceClient programServiceClient;
     private final NotificationClient notificationClient;
     private final HttpServletRequest request;
-
+    private final IdentityServiceClient identityServiceClient;
     // Self-injection via @Lazy to call @Transactional/@Auditable methods through
     // the Spring proxy instead of bypassing it with 'this' (fixes S6809)
     @org.springframework.context.annotation.Lazy
@@ -432,15 +425,39 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
-    public com.cts.fundtrack.common.dto.ApplicationMetadataDTO getApplicationMetadata(UUID applicationId) {
+    public ApplicationMetadataDTO getApplicationMetadata(UUID applicationId) {
         Application app = fetchApplication(applicationId);
-        return com.cts.fundtrack.common.dto.ApplicationMetadataDTO.builder()
+
+        // Resolve applicant name from Identity Service
+        String applicantName = "Unknown";
+        try {
+            UserMetadataDTO user = identityServiceClient.getUserById(app.getApplicantId());
+            if (user != null && user.getName() != null) {
+                applicantName = user.getName();
+            }
+        } catch (Exception e) {
+            log.warn("Could not resolve applicant name for ID {}: {}", app.getApplicantId(), e.getMessage());
+        }
+
+        // Resolve program name from Program Service (already wired, reuse existing client)
+        String programName = "";
+        try {
+            ProgramRequirementsDTO prog = programServiceClient.getRequirements(app.getProgramId());
+            if (prog != null && prog.getProgramName() != null) {
+                programName = prog.getProgramName();
+            }
+        } catch (Exception e) {
+            log.warn("Could not resolve program name for ID {}: {}", app.getProgramId(), e.getMessage());
+        }
+
+        return ApplicationMetadataDTO.builder()
                 .applicationId(app.getApplicationId())
                 .applicantUserId(app.getApplicantId())
+                .applicantName(applicantName)
+                .programName(programName)
                 .status(app.getStatus() != null ? app.getStatus().name() : null)
                 .build();
     }
-
     /**
      * Enriches an {@link ApplicationResponseDTO} with the {@code programName} fetched
      * from the Program Service. Unlike {@link #enrichResponse}, this does NOT set
@@ -449,6 +466,7 @@ public class ApplicationServiceImpl implements ApplicationService {
      * {@code X-User-Email} header represents the Finance manager, not the individual applicant.
      */
     private ApplicationResponseDTO enrichProgramName(ApplicationResponseDTO response) {
+        // existing program name logic
         try {
             ProgramRequirementsDTO requirements = programServiceClient.getRequirements(response.getProgramId());
             if (requirements != null) {
@@ -457,6 +475,19 @@ public class ApplicationServiceImpl implements ApplicationService {
         } catch (Exception e) {
             log.warn("Could not fetch program name for programId={}: {}", response.getProgramId(), e.getMessage());
         }
+
+        // ADD THIS — resolve applicant name from Identity Service
+        try {
+            if (response.getUserId() != null) {
+                UserMetadataDTO user = identityServiceClient.getUserById(response.getUserId());
+                if (user != null && user.getName() != null) {
+                    response.setUserName(user.getName());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch applicant name for userId={}: {}", response.getUserId(), e.getMessage());
+        }
+
         return response;
     }
 

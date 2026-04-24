@@ -76,7 +76,7 @@ public class SecurityConfig {
             
             // 3. Define the rules for the application routes
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                    .requestMatchers("/actuator/**", "/api/internal/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                 .anyRequest().authenticated()
             )
             
