@@ -20,35 +20,42 @@ public class FundtrackApiGatewayApplication {
     @Bean
     public RouteLocator fundtrackRoutes(RouteLocatorBuilder builder) {
         return builder.routes()
-            // 1. Identity Service Route
-            .route("identity-service", r -> r.path("/api/v1/auth/**")
-                .uri("lb://FUNDTRACK-IDENTITY-SERVICE"))
-            
-            // 2. Program Service Route
-            .route("program-service", r -> r.path("/api/v1/programs/**")
-                .uri("lb://FUNDTRACK-PROGRAM-SERVICE"))
+                // 1. Identity Service Route
+                .route("identity-service", r -> r.path("/api/v1/auth/**")
+                        .uri("lb://FUNDTRACK-IDENTITY-SERVICE"))
 
-            .route("application-service", r -> r.path("/api/v1/applications/**", "/api/v1/reviews/**", "/api/v1/decisions/**")
-            .uri("lb://FUNDTRACK-APPLICATION-SERVICE"))
-            
-            // 3. Lifecycle Service Route
-            .route("lifecycle-service", r -> r.path("/api/lifecycle/**")
-                .uri("lb://FUNDTRACK-LIFECYCLE-SERVICE"))
+                // 2. Program Service Route
+                .route("program-service", r -> r.path("/api/v1/programs/**")
+                        .uri("lb://FUNDTRACK-PROGRAM-SERVICE"))
 
-         // 4. Analytics Service Route (Ensuring path is preserved)
-.route("analytics-service", r -> r.path("/api/v1/analytics/**")
-    .uri("lb://FUNDTRACK-ANALYTICS-SERVICE"))
-        
+                // 3. Application Service Route
+                .route("application-service", r -> r.path("/api/v1/applications/**", "/api/v1/reviews/**", "/api/v1/decisions/**")
+                        .uri("lb://FUNDTRACK-APPLICATION-SERVICE"))
 
-            .route("disbursement-service",
-    r -> r.path(
-        "/api/v1/disbursements/**",
-        "/api/v1/payments/**",
-        "/api/v1/compliance/**",
-        "/api/v1/reports/**"
-    )
-    .uri("lb://fundtrack-disbursement-service"))
+                // 4. Analytics Service Route
+                .route("analytics-service", r -> r.path("/api/v1/analytics/**")
+                        .uri("lb://FUNDTRACK-ANALYTICS-SERVICE"))
 
-        .build();
-        }
-}
+                // 5. Disbursement Service Route
+                .route("disbursement-service", r -> r.path(
+                                "/api/v1/disbursements/**",
+                                "/api/v1/payments/**",
+                                "/api/v1/compliance/**",
+                                "/api/v1/reports/**"
+                        )
+                        .uri("lb://fundtrack-disbursement-service"))
+
+                // 6. Notification Service Route ✅ ADDED
+                .route("notification-service", r -> r.path("/api/v1/notifications/**")
+                        .uri("lb://FUNDTRACK-NOTIFICATION-SERVICE"))
+
+                // 7. Audit Service Route ✅ ADDED
+                .route("audit-service", r -> r.path("/api/v1/audit/**")
+                        .uri("lb://FUNDTRACK-IDENTITY-SERVICE"))
+
+                // 8. File Serving Route ✅ ADDED
+                .route("file-service", r -> r.path("/api/v1/files/**")
+                        .uri("lb://fundtrack-disbursement-service"))
+
+                .build();
+    }}

@@ -21,7 +21,9 @@ import java.util.UUID;
 @AllArgsConstructor
 @Schema(description = "Compliance summary model used in dashboards and audit workflows.")
 public class ApplicantComplianceDTO {
-
+    @Schema(description = "UUID of the latest submitted grant report, null if none exists",
+            example = "e1f2g3h4-i5j6-7k8l-9m0n-o1p2q3r4s5t6")
+    private UUID reportId;
     @Schema(description = "Unique identifier of the grant application",
             example = "a1b2c3d4-e5f6-7g8h-9i0j-k1l2m3n4o5p6")
     private UUID applicationId;

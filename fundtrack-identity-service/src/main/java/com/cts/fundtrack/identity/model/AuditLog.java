@@ -56,8 +56,8 @@ public class AuditLog {
      * <p>Lazily fetched to avoid loading the full {@link User} graph when only
      * log metadata is required. Must not be {@code null}.</p>
      */
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "user_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = true)
     private User user;
 
     /**

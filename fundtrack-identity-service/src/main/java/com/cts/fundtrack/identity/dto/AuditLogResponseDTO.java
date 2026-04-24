@@ -23,7 +23,17 @@ public class AuditLogResponseDTO {
         this.action     = log.getAction();
         this.entityName = log.getEntityName();
         this.entityId   = log.getEntityId();
-        this.userName   = log.getUser() != null ? log.getUser().getName() : "System";
         this.timestamp  = log.getTimestamp();
+
+        // ✅ FIXED: safely get userName without crashing if user is deleted
+        String name = "System";
+        try {
+            if (log.getUser() != null) {
+                name = log.getUser().getName();
+            }
+        } catch (Exception e) {
+            name = "Deleted User";
+        }
+        this.userName = name;
     }
 }

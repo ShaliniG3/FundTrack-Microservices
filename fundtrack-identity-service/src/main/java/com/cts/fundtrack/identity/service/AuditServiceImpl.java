@@ -70,6 +70,7 @@ public class AuditServiceImpl implements AuditService {
         return auditRepository.findByUser_UserId(userId);
     }
     @Override
+    @Transactional(readOnly = true)
     public List<AuditLog> getLogsByAction(com.cts.fundtrack.common.models.enums.ActionType action) {
         return auditRepository.findByAction(action);
     }

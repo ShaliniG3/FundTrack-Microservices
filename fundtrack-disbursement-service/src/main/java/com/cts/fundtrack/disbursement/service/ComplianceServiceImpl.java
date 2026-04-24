@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.cts.fundtrack.disbursement.client.ApplicationClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +43,8 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 public class ComplianceServiceImpl implements ComplianceService {
-
+    // In ComplianceServiceImpl — add this field
+    private final ApplicationClient applicationClient;
     private final ComplianceCheckRepository complianceCheckRepository;
     private final GrantReportRepository grantReportRepository;
     private final DisbursementRepository disbursementRepository;
@@ -188,10 +190,25 @@ public class ComplianceServiceImpl implements ComplianceService {
             List<GrantReport> reports = grantReportRepository.findByApplicationIdOrderBySubmittedDateDesc(appId);
             String complianceStatus = resolveStatus(reports, paidInstallments);
 
+            UUID latestReportId = reports.isEmpty() ? null : reports.get(0).getGrantReportId();
+
+            String applicantName = "Unknown";
+            String programName = "";
+            try {
+                ApplicationMetadataDTO meta = applicationClient.getApplicationMetadata(appId);
+                applicantName = meta.getApplicantName();
+                programName   = meta.getProgramName();   // adjust field name to match your DTO
+            } catch (Exception e) {
+                log.warn("Could not fetch metadata for application {}: {}", appId, e.getMessage());
+            }
+
             return ApplicantComplianceDTO.builder()
                     .applicationId(appId)
+                    .applicantName(applicantName)
+                    .programName(programName)
                     .latestReportStatus(complianceStatus)
                     .currentInstallment((int) paidInstallments)
+                    .reportId(latestReportId)
                     .build();
         }).toList();
     }
@@ -225,7 +242,10 @@ public class ComplianceServiceImpl implements ComplianceService {
                 .checkId(check.getCheckId())
                 .grantReportId(check.getGrantReportId())
                 .applicationId(check.getApplicationId())
+                .complianceOfficerId(check.getComplianceOfficerId())
+                .auditType(check.getType())   // ✅ was missing
                 .result(check.getResult().name())
+                .notes(check.getNotes())       // ✅ was missing
                 .auditDate(check.getDate().toString())
                 .build();
     }

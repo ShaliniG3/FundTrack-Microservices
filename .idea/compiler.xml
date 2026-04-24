@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile default="true" name="Default" enabled="true" />
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="fundtrack-discovery-service" />
+        <module name="fundtrack-api-gateway" />
+      </profile>
+      <profile name="Annotation profile for fundtrack-notification-service" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.38/lombok-1.18.38.jar" />
+        </processorPath>
+        <module name="fundtrack-notification-service" />
+        <module name="fundtrack-application-service" />
+        <module name="fundtrack-analytics-service" />
+      </profile>
+      <profile name="Annotation profile for fundtrack-program-service" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.38/lombok-1.18.38.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok-mapstruct-binding/0.2.0/lombok-mapstruct-binding-0.2.0.jar" />
+          <entry name="$MAVEN_REPOSITORY$/org/mapstruct/mapstruct-processor/1.6.3/mapstruct-processor-1.6.3.jar" />
+        </processorPath>
+        <module name="fundtrack-disbursement-service" />
+        <module name="fundtrack-common" />
+        <module name="fundtrack-program" />
+        <module name="fundtrack-identity-service" />
+      </profile>
+    </annotationProcessing>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="fundtrack-analytics-service" options="-parameters" />
+      <module name="fundtrack-api-gateway" options="-parameters" />
+      <module name="fundtrack-application-service" options="-parameters" />
+      <module name="fundtrack-common" options="-parameters" />
+      <module name="fundtrack-disbursement-service" options="-parameters" />
+      <module name="fundtrack-discovery-service" options="-parameters" />
+      <module name="fundtrack-identity-service" options="-parameters" />
+      <module name="fundtrack-notification-service" options="-parameters" />
+      <module name="fundtrack-program" options="-parameters -parameters" />
+    </option>
+  </component>
+</project>
