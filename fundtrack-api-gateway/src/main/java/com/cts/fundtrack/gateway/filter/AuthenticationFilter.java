@@ -29,7 +29,7 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         String path = request.getURI().getPath();
 
         // 1. Bypass validation for public endpoints
-        if (path.contains("/api/v1/auth") || path.contains("/v3/api-docs")) {
+        if (path.contains("/api/v1/auth") || path.contains("/v3/api-docs") || path.contains("/api/v1/files") || path.contains("/api/v1/application-files")) {
             return chain.filter(exchange);
         }
 
