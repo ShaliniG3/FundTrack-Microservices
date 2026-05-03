@@ -1,0 +1,84 @@
+server:
+  port: 9093
+  tomcat:
+    max-http-form-post-size: 20MB
+    max-swallow-size: 20MB
+
+spring:
+  application:
+    name: fundtrack-application-service
+
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/application_db?createDatabaseIfNotExist=true
+    username: root
+    password: Sonu@4002
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # JPA / Hibernate settings
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    # Hibernate 7 auto-detects version from JDBC; generic dialect is safest
+    database-platform: org.hibernate.dialect.MySQLDialect
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  # Feign & Resilience Configuration
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
+# Resilience4j Circuit Breaker Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        minimum-number-of-calls: 5
+
+# Eureka Client Configuration
+eureka:
+  client:
+    enabled: true
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    # FIX: Explicitly use localhost to stop Gateway routing errors
+    ip-address: 127.0.0.1
+    # Random value prevents Eureka conflict on quick restarts
+    instance-id: ${spring.application.name}:${random.value}
+
+# Internal service URLs for Feign Clients
+app:
+  services:
+    # Points to your Identity/Audit Service
+    audit-url: http://localhost:9091
+
+# Management Endpoints (Actuator)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, beans, actuator
+  endpoint:
+    health:
+      show-details: always
+
+# Logging levels
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: DEBUG
+    # Helpful for tracking down potential 403s or filter issues
+    org.springframework.security: DEBUG

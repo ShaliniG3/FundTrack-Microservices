@@ -1,0 +1,64 @@
+server:
+  port: 8090 # Analytics service port
+
+spring:
+  application:
+    name: fundtrack-analytics-service
+  
+  # 1. Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/fundtrack_analytics_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+    username: root
+    password: Sonu@4002
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  # 2. JPA / Hibernate Settings
+  jpa:
+    hibernate:
+      ddl-auto: update # Automatically creates tables based on your @Entity classes
+    show-sql: true # Great for debugging analytics queries in the console
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  # 3. Spring Cloud Config (Since you included the Config Client)
+  config:
+    import: "optional:configserver:http://localhost:8888/" # Only pulls if Config Server is up
+
+# 4. Feign Circuit Breakers
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
+# Resilience4j Circuit Breaker Configuration
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        minimum-number-of-calls: 5
+
+# 4. Eureka Client Registration
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+
+# 5. Actuator for Health Checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: always

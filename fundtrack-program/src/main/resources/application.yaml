@@ -1,0 +1,59 @@
+server:
+  port: 9092
+
+spring:
+  application:
+    name: fundtrack-program-service
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/fundtrack_db?createDatabaseIfNotExist=true
+    username: root
+    password: Sonu@4002
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  
+  # JPA / Hibernate settings
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    # FIX: Use the generic MySQLDialect (Compatible with Hibernate 7)
+    database-platform: org.hibernate.dialect.MySQLDialect
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+# Eureka Client Configuration
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    # FIX: Force localhost to avoid connection timeouts (getsockopt 500 errors)
+    ip-address: 127.0.0.1
+    # Random value prevents Eureka conflicts if you restart the service quickly
+    instance-id: ${spring.application.name}:${random.value}
+
+# Management & Health Checks
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, beans, actuator
+  endpoint:
+    health:
+      show-details: always
+
+# Logging levels for debugging
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    # DEBUG for your Feign Clients to see the Audit calls
+    com.cts.fundtrack.program.client: DEBUG
+    # TRACE to see the incoming Gateway headers
+    com.cts.fundtrack.program.security.GatewayHeaderFilter: TRACE
